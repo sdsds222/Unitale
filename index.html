@@ -823,6 +823,38 @@
                 const customPromptTemplate = ref(defaultPromptTemplate);
                 const useCustomPrompt = ref(false);
 
+                // --- 音频引擎与缓存 (Audio Engine & Cache) ---
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const audioBufferCache = new Map();
+
+                const loadAudioToCache = async (url) => {
+                    if (audioBufferCache.has(url)) return audioBufferCache.get(url);
+                    try {
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error(`Failed to fetch ${url}`);
+                        const ab = await res.arrayBuffer();
+                        const buffer = await audioContext.decodeAudioData(ab);
+                        audioBufferCache.set(url, buffer);
+                        return buffer;
+                    } catch (e) {
+                        console.warn(`Failed to preload ${url}`, e);
+                        return null;
+                    }
+                };
+
+                const preloadAudioAssets = async () => {
+                    console.log('正在预加载音频素材...');
+                    const promises = [];
+                    sfxLibrary.value.forEach(s => {
+                        if (s.filename) promises.push(loadAudioToCache(`voice/${s.filename}`));
+                    });
+                    bgmLibrary.value.forEach(b => {
+                        if (b.filename) promises.push(loadAudioToCache(`voice/${b.filename}`));
+                    });
+                    await Promise.allSettled(promises);
+                    console.log('音频素材预加载完成');
+                };
+
                 // 读取持久化配置
                 onMounted(async () => {
                     const savedTab = localStorage.getItem('storyforge_activeTab');
@@ -926,6 +958,9 @@
                     setTimeout(() => {
                         syncTimbresOnStartup();
                     }, 1000);
+
+                    // 启动时预加载音效和BGM
+                    preloadAudioAssets();
                 });
 
                 const currentTtsConfig = computed(() => {
@@ -1184,6 +1219,7 @@
                         } else {
                             sfxLibrary.value.push({ ...sfxForm.value, id: Date.now().toString(), enabled: true });
                         }
+                        if (sfxForm.value.filename) loadAudioToCache(`voice/${sfxForm.value.filename}`);
                         saveSfxToLocal();
                         resetSfxForm();
                     } catch (e) {
@@ -1232,6 +1268,7 @@
                         } else {
                             bgmLibrary.value.push({ ...bgmForm.value, id: Date.now().toString(), enabled: true });
                         }
+                        if (bgmForm.value.filename) loadAudioToCache(`voice/${bgmForm.value.filename}`);
                         saveBgmToLocal();
                         resetBgmForm();
                     } catch (e) {
@@ -1391,7 +1428,6 @@
                     scriptLines.value.splice(index + 1, 0, item);
                 };
 
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 let dialogueSource = null;
                 let sfxSources = [];
                 const isAuditioningId = ref(null);
@@ -1497,6 +1533,7 @@
 
                 const playLineAudio = (line, stopPreviousSfx = true) => {
                     return new Promise(async (resolve, reject) => {
+                        try {
                         // 1. Resume AudioContext if it's suspended
                         if (audioContext.state === 'suspended') {
                             await audioContext.resume();
@@ -1524,29 +1561,35 @@
 
                         isAuditioningId.value = line.id;
 
-                        try {
-                            // 3. Fetch and decode dialogue audio
-                            const dialogueResponse = await fetch(line.audioUrl);
-                            const dialogueArrayBuffer = await dialogueResponse.arrayBuffer();
-                            const dialogueBuffer = await audioContext.decodeAudioData(dialogueArrayBuffer);
+                        // 3. Prepare loading promises (Parallel loading)
+                        const loadDialogue = async () => {
+                            const res = await fetch(line.audioUrl);
+                            const ab = await res.arrayBuffer();
+                            return await audioContext.decodeAudioData(ab);
+                        };
 
-                            // 2. Preload SFX (Ensure sync)
-                            const sfxBuffers = [];
-                            if (line.sfx && line.sfx.length > 0) {
-                                await Promise.all(line.sfx.map(async (sfxItem) => {
+                        const loadSfx = async () => {
+                            if (!line.sfx || line.sfx.length === 0) return [];
+                            const promises = line.sfx.map(async (sfxItem) => {
                                     const sfxLibItem = sfxLibrary.value.find(s => s.name === sfxItem.name);
                                     if (sfxLibItem && sfxLibItem.filename) {
-                                        try {
-                                            const res = await fetch(`voice/${sfxLibItem.filename}`);
-                                            const ab = await res.arrayBuffer();
-                                            const buf = await audioContext.decodeAudioData(ab);
-                                            sfxBuffers.push({ buffer: buf, item: sfxItem });
-                                        } catch(e) { console.warn(e); }
+                                        const url = `voice/${sfxLibItem.filename}`;
+                                        const buf = await loadAudioToCache(url);
+                                        if (buf) return { buffer: buf, item: sfxItem };
                                     }
-                                }));
-                            }
+                                    return null;
+                            });
+                            const results = await Promise.all(promises);
+                            return results.filter(r => r !== null);
+                        };
 
-                            // 4. Set up dialogue
+                        // 4. Execute loads in parallel
+                        const [dialogueBuffer, sfxBuffers] = await Promise.all([
+                            loadDialogue(),
+                            loadSfx()
+                        ]);
+
+                        // 5. Set up dialogue
                             dialogueSource = audioContext.createBufferSource();
                             dialogueSource.buffer = dialogueBuffer;
 
@@ -1582,7 +1625,7 @@
                             const dialogueDuration = dialogueBuffer.duration;
                             const now = audioContext.currentTime + 0.05; // Slight delay for sync
                             
-                            // 5. Schedule SFX
+                            // 6. Schedule SFX
                             sfxBuffers.forEach(({ buffer, item }) => {
                                 const sSrc = audioContext.createBufferSource();
                                 sSrc.buffer = buffer;
@@ -1590,7 +1633,8 @@
                                 sGain.gain.setValueAtTime(line.sfxVolume ?? 0.5, now);
                                 sSrc.connect(sGain).connect(audioContext.destination);
                                 
-                                const startT = now + (dialogueDuration * item.position);
+                                const pos = parseFloat(item.position) || 0;
+                                const startT = now + (dialogueDuration * pos);
                                 sSrc.start(startT);
                                 
                                 sfxSources.push(sSrc);
@@ -1600,7 +1644,7 @@
                                 };
                             });
 
-                            // 6. Play dialogue
+                            // 7. Play dialogue
                             dialogueSource.onended = async () => {
                                 // This event fires on natural end or manual .stop()
                                 if (isAuditioningId.value === line.id) {
@@ -1613,9 +1657,9 @@
 
                         } catch (e) {
                             console.error("Failed to play audio:", e);
-                            alert('播放音频失败，请检查文件或网络。');
+                            // alert('播放音频失败，请检查文件或网络。'); // Suppress alert for smoother UX
                             isAuditioningId.value = null;
-                            reject(e);
+                            resolve(); // Resolve to not block sequence
                         }
                     });
                 };
@@ -1799,6 +1843,8 @@
                             } else if (line.type === 'dialogue') {
                                 const buffer = assets.dialogues[line.id];
                                 if (buffer) {
+                                    // 模拟 playLineAudio 中的 0.05s 调度延迟，确保导出节奏与实时播放一致
+                                    currentTime += 0.05;
                                     events.push({ type: 'dialogue', time: currentTime, buffer: buffer, line: line });
                                     currentTime += buffer.duration;
                                 }
@@ -1870,7 +1916,8 @@
                                         const sGain = offlineCtx.createGain();
                                         sGain.gain.value = evt.line.sfxVolume ?? 0.5;
                                         sSrc.connect(sGain).connect(offlineCtx.destination);
-                                        sSrc.start(evt.time + (evt.buffer.duration * s.position));
+                                        const pos = parseFloat(s.position) || 0;
+                                        sSrc.start(evt.time + (evt.buffer.duration * pos));
                                     }
                                 });
                             }
@@ -2082,10 +2129,10 @@
                     }
 
                     try {
-                        const response = await fetch(`voice/${bgmLibItem.filename}`);
-                        const arrayBuffer = await response.arrayBuffer();
-                        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
+                        const url = `voice/${bgmLibItem.filename}`;
+                        const audioBuffer = await loadAudioToCache(url);
+                        if (!audioBuffer) throw new Error('Load failed');
+                        
                         bgmAudioNode = audioContext.createBufferSource();
                         bgmAudioNode.buffer = audioBuffer;
                         bgmAudioNode.loop = true;
