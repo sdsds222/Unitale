@@ -4,7 +4,7 @@
 
 界面简洁，使用简单，能够一键生成，用户可以对生成的音频内容进行微调。
 
-在线使用页面：
+在线使用页面（须自行配置LLM和IndexTTS2的API）：
 
 https://sdsds222.github.io/Unitale/
 
