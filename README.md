@@ -8,6 +8,10 @@
 
 https://sdsds222.github.io/Unitale/
 
+IndexTTS 2 免费云原生项目：
+https://cnb.cool/ConyStudio/index-tts-v2
+启动后在前端输入云原生项目的Ip地址即可调用
+
 ![主界面截图](Snipaste_2026-01-20_05-40-46.png)
 
 ![主界面截图](Snipaste_2026-01-20_05-45-21.png)
