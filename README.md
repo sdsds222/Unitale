@@ -4,7 +4,11 @@
 
 界面简洁，使用简单，能够一键生成，用户可以对生成的音频内容进行微调。
 
-b站生成效果演示视频：https://www.bilibili.com/video/BV1jYkGBqEkL/?vd_source=d1681b7d6b38237df98a7c9aa196d8ce#reply115923432245666
+b站生成效果演示视频：
+
+https://www.bilibili.com/video/BV1Mbk3BHEDk
+
+https://www.bilibili.com/video/BV1v2kjB5EKV
 
 在线使用页面（须自行配置LLM和IndexTTS2的API）：
 
@@ -41,6 +45,20 @@ AI 场景感知滤波器：系统自动检测特殊的对话场景（如“电�
 
 ![主界面截图](Snipaste_2026-01-20_05-40-53.png)
 
+
+音效资源库默认为空，可以导入voice下的SFX特效和BGM，需要按照按照下面截图的配置进行填写：
+
+SFX场景音效资源库:
+
+![主界面截图](sfx1.png)
+
+![主界面截图](sfx2.png)
+
+![主界面截图](sfx3.png)
+
+BGM背景音乐资源库：
+
+![主界面截图](BGM.png)
 
 ## 本地化与导出:
 
