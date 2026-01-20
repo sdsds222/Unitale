@@ -4,7 +4,9 @@
 
 界面简洁，使用简单，能够一键生成，用户可以对生成的音频内容进行微调。
 
-b站生成效果演示视频：https://www.bilibili.com/video/BV1jYkGBqEkL/?vd_source=d1681b7d6b38237df98a7c9aa196d8ce#reply115923432245666
+b站生成效果演示视频：https://www.bilibili.com/video/BV1jYkGBqEkL
+
+https://www.bilibili.com/video/BV1v2kjB5EKV
 
 在线使用页面（须自行配置LLM和IndexTTS2的API）：
 
