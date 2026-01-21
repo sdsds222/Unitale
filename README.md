@@ -1,14 +1,12 @@
 # Unitale
 
-一个基于Indextts的 AI 有声书制作工具。利用 LLM 自动拆解剧本与识别情绪，集成多角色 TTS 语音合成，支持音效(SFX)、背景音乐(BGM)混音及实时台词音频滤波器的自动插入和匹配，可直接在浏览器导出 WAV 成品，本工具本体无需配置环境即可跨平台在浏览器使用。
+一个基于Indextts的 AI 有声书制作工具。利用 LLM 自动拆解剧本与识别情绪，集成多角色 TTS 语音合成，支持音效(SFX)、背景音乐(BGM)混音及实时台词音频滤波器的自动插入和匹配，可直接在浏览器导出 mp3 成品，本工具本体无需配置环境即可跨平台在浏览器使用。
 
 界面简洁，使用简单，能够一键生成，用户可以对生成的音频内容进行微调。
 
-b站生成效果演示视频：
+b站生成效果演示视频：https://www.bilibili.com/video/BV1jYkGBqEkL/?vd_source=d1681b7d6b38237df98a7c9aa196d8ce#reply115923432245666
 
-https://www.bilibili.com/video/BV1Mbk3BHEDk
 
-https://www.bilibili.com/video/BV1v2kjB5EKV
 
 在线使用页面（须自行配置LLM和IndexTTS2的API）：
 
@@ -18,7 +16,7 @@ IndexTTS 2 免费云原生项目：
 
 https://cnb.cool/ConyStudio/index-tts-v2
 
-启动后在前端输入云原生项目的Ip地址即可调用。
+Fork仓库后，即可点击按钮在线启动部署，启动后在前端输入云原生项目的port里面的Ip地址即可调用。
 
 LLM可以使用Gemini，
 
