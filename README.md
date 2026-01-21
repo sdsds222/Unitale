@@ -16,7 +16,7 @@ IndexTTS 2 免费云原生项目：
 
 https://cnb.cool/ConyStudio/index-tts-v2
 
-启动后在前端输入云原生项目的Ip地址即可调用。
+Fork仓库后，即可点击按钮在线启动部署，启动后在前端输入云原生项目的port里面的Ip地址即可调用。
 
 LLM可以使用Gemini，
 
