@@ -8,13 +8,13 @@ b站生成效果演示视频：https://www.bilibili.com/video/BV1jYkGBqEkL/?vd_s
 
 
 
-在线使用页面（须自行配置LLM和IndexTTS2的API）：
+### 在线使用页面（须自行配置LLM和IndexTTS2的API）：
 
 https://sdsds222.github.io/Unitale/
 
 
 
-IndexTTS 2 免费云原生项目：
+### IndexTTS 2 免费云原生项目：
 
 https://cnb.cool/ConyStudio/index-tts-v2
 
@@ -22,12 +22,12 @@ Fork云原生仓库后，即可点击按钮在线启动部署，启动后在前�
 
 
 
-LLM可以使用Gemini，
+### LLM可以使用Gemini，
 
-输入URL：https://generativelanguage.googleapis.com/v1beta/openai   和你的APIKRY即可设置完成。
+输入URL：https://generativelanguage.googleapis.com/v1beta/openai   和你的APIKEY即可设置完成。
 
 
-
+### 音频资源整合包
 可以在编辑界面点击保存工程按钮，能够保存音色、音效、BGM、滤波器和脚本编辑工作台的所有信息，一定要记得经常保存，页面清空后可以用存档文件恢复所有工作状态。
 
 新手可以先使用制作好的初始工程整合包，里面提供了基础的音色、音效、BGM供使用，在本项目目录里，Unitale工程文件.json
