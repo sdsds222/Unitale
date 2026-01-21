@@ -30,6 +30,7 @@ Fork云原生仓库后，即可点击按钮在线启动部署，启动后，在�
 
 https://www.bilibili.com/video/BV1HwyYBTEcy?spm_id_from=333.788.videopod.sections&vd_source=d1681b7d6b38237df98a7c9aa196d8ce
 
+IndexTTS的api接口务必使用 https://cnb.cool/ConyStudio/index-tts-v2 的api.py写的接口定义规范，不然不能正常调用。
 
 ### LLM使用OpenAI通用接口
 LLM支持使用各种支持OpenAI通用接口的大模型。
