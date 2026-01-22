@@ -1527,6 +1527,33 @@
                         const cfg = currentTtsConfig.value;
                         const baseUrl = cfg.baseUrl.trim().replace(/\/+$/, '');
 
+                        // --- 自动上传逻辑 (Lazy Upload) ---
+                        // 检查本地是否有该音色文件，如果有，则检查服务器是否存在，不存在则上传
+                        const voiceFile = localFileMap.value.get(char.voiceFile);
+                        if (voiceFile) {
+                            try {
+                                // 1. 检查服务器是否存在
+                                const checkUrl = `${baseUrl}/v1/check/audio?file_name=${encodeURIComponent(char.voiceFile)}`;
+                                const checkRes = await fetch(checkUrl);
+                                let exists = false;
+                                if (checkRes.ok) {
+                                    const checkData = await checkRes.json();
+                                    exists = checkData.exists;
+                                }
+
+                                // 2. 如果不存在，则上传
+                                if (!exists) {
+                                    // console.log(`正在自动上传音色: ${char.voiceFile}`);
+                                    const formData = new FormData();
+                                    formData.append('audio', voiceFile, char.voiceFile);
+                                    formData.append('full_path', char.voiceFile);
+                                    await fetch(`${baseUrl}/v1/upload_audio`, { method: 'POST', body: formData });
+                                }
+                            } catch (e) {
+                                console.warn('自动上传音色文件失败，尝试直接合成:', e);
+                            }
+                        }
+
                         const synthRes = await fetch(`${baseUrl}/v2/synthesize`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1870,6 +1897,7 @@
                                     
                                     // 4. 同步音色到服务器
                                     await syncTimbresWithServer();
+                                    // await syncTimbresWithServer(); // 移除导入时的自动同步，改为生成时按需上传
                                 }
 
                                 // 3. 恢复项目状态
