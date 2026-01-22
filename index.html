@@ -26,7 +26,7 @@
                 <h1 class="text-2xl font-bold text-slate-800">Unitale <span class="text-blue-600">1.2</span></h1>
                 <p class="text-slate-400 text-xs mt-1">多角色音效有声书生成工具</p>
             </div>
-            <div class="text-[10px] text-slate-300">v2.2</div>
+            <div class="text-[10px] text-slate-300">v1.2</div>
         </header>
         
         <!-- 标签页导航 -->
@@ -50,7 +50,7 @@
 
         <!-- 页面 1: 模型配置 (LLM & TTS) -->
         <div v-if="activeTab === 'config'" class="space-y-6">
-            <h2 class="text-lg font-bold text-slate-800 border-b pb-2">LLM 模型配置</h2>
+            <h2 class="text-lg font-bold text-slate-800 border-b pb-2">LLM 模型配置（OpenAI通用接口）</h2>
             <!-- 添加/编辑表单 -->
             <div class="bg-slate-50 p-5 rounded-xl border border-slate-200">
                 <h3 class="text-sm font-bold text-slate-700 mb-4">{{ isEditing ? '编辑配置' : '添加新配置' }}</h3>
@@ -70,6 +70,10 @@
                     <div class="md:col-span-2">
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">API Key</label>
                         <input v-model="form.key" type="password" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="sk-...">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">额外参数 (JSON格式，可选)</label>
+                        <input v-model="form.params" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder='例如: {"temperature": 0.7, "max_tokens": 2000}'>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -145,7 +149,7 @@
                     <div class="md:col-span-2">
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">目标 TTS 服务 (用于上传音频)</label>
                         <select v-model="currentTtsConfigId" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                            <option value="" disabled>-- 请选择 TTS 服务 --</option>
+                            <option value="" disabled>-- 请选择 TTS 模型 --</option>
                             <option v-for="conf in ttsConfigs" :key="conf.id" :value="conf.id">
                                 {{ conf.name }} ({{ conf.baseUrl }})
                             </option>
@@ -166,7 +170,7 @@
                             <button type="button" @click="$refs.timbreFileRef.click()" class="whitespace-nowrap px-3 py-2 bg-slate-100 border border-slate-300 text-slate-600 rounded-lg text-xs hover:bg-slate-200 transition-colors">选择文件</button>
                             <input v-model="timbreForm.refPath" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="选择一个音频文件作为音色参考">
                         </div>
-                        <p class="text-[10px] text-slate-400 mt-1">提示：选择的音频文件将被上传至 TTS 服务器作为音色参考。</p>
+                        <p class="text-[10px] text-slate-400 mt-1">提示：选择的音频文件将被上传至 TTS 服务器作为音色参考。请确保TTS服务器已启动。</p>
                     </div>
                 </div>
                 <div class="flex gap-2">
@@ -472,25 +476,37 @@
 
                 <textarea v-model="rawScript" class="w-full p-4 border rounded-xl h-48 mb-4 focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-slate-50 text-sm leading-relaxed" placeholder="请粘贴小说内容或剧本原文..."></textarea>
                 <div class="flex flex-wrap gap-2">
-                    <button @click="analyzeScript" :disabled="isAnalyzingScript" class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center">
+                    <select v-model="currentConfigId" class="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white max-w-[180px]" title="选择用于分析的 LLM 模型">
+                        <option value="" disabled>-- 选择LLM模型 --</option>
+                        <option v-for="conf in llmConfigs" :key="conf.id" :value="conf.id">
+                            {{ conf.name }}
+                        </option>
+                    </select>
+                    <button @click="analyzeScript" :disabled="isAnalyzingScript" class="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center">
                         <span v-if="isAnalyzingScript" class="animate-spin mr-2">⏳</span> {{ isAnalyzingScript ? 'AI 分析中...' : 'AI 深度分析' }}
                     </button>
-                    <button @click="addDialogueBlock" class="px-4 py-2 bg-blue-100 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-200 transition-all">
+                    <button @click="addDialogueBlock" class="px-2 py-2 bg-blue-100 text-blue-600 rounded-lg text-sm font-bold hover:bg-blue-200 transition-all">
                         ➕ 插入台词
                     </button>
-                    <button @click="addBgmBlock" class="px-4 py-2 bg-purple-100 text-purple-600 rounded-lg text-sm font-bold hover:bg-purple-200 transition-all">
-                        ➕ 插入 BGM
+                    <button @click="addBgmBlock" class="px-2 py-2 bg-purple-100 text-purple-600 rounded-lg text-sm font-bold hover:bg-purple-200 transition-all">
+                        ➕ 插入BGM
                     </button>
-                    <div class="flex-grow"></div>
-                    <button @click="generateAllLines" :disabled="isGeneratingAll || isSequencePlaying" class="px-6 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 disabled:opacity-50 transition-all flex items-center">
+                    <select v-model="currentTtsConfigId" class="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white max-w-[180px]" title="选择用于生成的 TTS 服务">
+                        <option value="" disabled>-- 选择 TTS 模型 --</option>
+                        <option v-for="conf in ttsConfigs" :key="conf.id" :value="conf.id">
+                            {{ conf.name }}
+                        </option>
+                    </select>
+                    <button @click="generateAllLines" :disabled="isGeneratingAll || isSequencePlaying" class="px-2 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 disabled:opacity-50 transition-all flex items-center">
                          <span v-if="isGeneratingAll" class="animate-spin mr-2">⏳</span> {{ isGeneratingAll ? '生成中...' : '生成全部台词音频' }}
                     </button>
-                    <button v-if="!isSequencePlaying" @click="playScriptSequentially" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 disabled:opacity-50 transition-all">
+                    <button v-if="!isSequencePlaying" @click="playScriptSequentially" class="px-2 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 disabled:opacity-50 transition-all">
                         {{ selectedLineIndex !== -1 ? '▶️ 从选中位置播放' : '▶️ 顺序播放' }}
                     </button>
                     <button v-else @click="stopScriptSequentially" class="px-6 py-2 bg-red-500 text-white rounded-lg text-sm font-bold hover:bg-red-600 transition-all">
                         停止播放
                     </button>
+                    <div class="flex-grow"></div>
                 </div>
             </div>
 
@@ -499,7 +515,7 @@
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-sm font-bold text-slate-700">2. 脚本台词列表 ({{ scriptLines.length }} 行)</h3>
                 </div>
-                <div class="space-y-3 max-h-[600px] overflow-y-auto pr-2 pb-10">
+                <div class="space-y-3 max-h-[600px] overflow-y-auto px-2 pb-10">
                     <div v-for="(line, index) in scriptLines" :key="line.id" @click="selectedLineIndex = index" class="transition-all duration-200">
                         
                         <!-- BGM 控制块 -->
@@ -531,7 +547,8 @@
                         </div>
 
                         <!-- 台词块 -->
-                        <div v-else :class="['flex items-stretch gap-3 p-3 rounded-lg mb-2 transition-all group cursor-pointer', selectedLineIndex === index ? 'bg-blue-50 shadow-sm' : 'bg-white hover:bg-slate-50', currentSequenceIndex === index ? 'ring-2 ring-green-500' : '']">
+                        <div v-else :class="['flex flex-col gap-2 p-3 rounded-lg mb-2 transition-all group cursor-pointer border', selectedLineIndex === index ? 'bg-blue-50 border-blue-300 shadow-md' : 'bg-white border-slate-200 shadow-sm hover:bg-slate-50', currentSequenceIndex === index ? 'ring-2 ring-green-500' : '']">
+                        <div class="flex flex-wrap items-stretch gap-3">
                         <div class="flex flex-col items-center justify-center gap-1 w-8 flex-shrink-0 border-r border-slate-100 pr-2">
                             <button @click.stop="moveLineUp(index)" class="text-slate-400 hover:text-blue-600 p-0.5 hover:bg-slate-100 rounded" title="上移">▲</button>
                             <div class="text-xs font-bold text-slate-400 select-none">{{ index + 1 }}</div>
@@ -583,26 +600,23 @@
                                 <input type="range" v-model="line.sfxVolume" min="0" max="1" step="0.05" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 block">
                             </div>
                         </div>
-
-                        <!-- 文本与音效区域 -->
-                        <div class="flex-1 flex flex-col gap-2 min-w-0">
-                            <textarea v-model="line.text" rows="2" class="w-full h-full bg-transparent border-none focus:ring-0 text-sm text-slate-700 resize-none leading-relaxed py-1.5" @input="autoResizeTextarea($event)"></textarea>
-                            
-                            <!-- 音效管理条 -->
-                            <div class="flex flex-wrap items-center gap-2">
-                                <div v-for="(sfx, sIdx) in line.sfx" :key="sIdx" class="flex items-center bg-blue-50 border border-blue-100 rounded px-2 py-1 text-xs">
-                                    <span class="mr-1"></span>
-                                    <select v-model="sfx.name" class="bg-transparent outline-none border-b border-transparent hover:border-blue-300 text-blue-700 font-medium max-w-[100px] cursor-pointer">
-                                        <option v-for="libSfx in sfxLibrary" :key="libSfx.id" :value="libSfx.name">{{ libSfx.name }}</option>
-                                    </select>
-                                    <span class="mx-1 text-slate-400">@</span>
-                                    <input type="number" v-model="sfx.position" step="0.1" min="0" max="1" class="w-10 bg-transparent text-center outline-none border-b border-transparent hover:border-blue-300" title="插入位置 (0.0 - 1.0)">
-                                    <button @click="removeLineSfx(line, sIdx)" class="ml-2 text-slate-400 hover:text-red-500 font-bold">×</button>
-                                </div>
-                                <button @click="addLineSfx(line)" class="text-[10px] text-slate-400 hover:text-blue-600 border border-dashed border-slate-300 rounded px-2 py-1 hover:border-blue-400 transition-colors flex items-center gap-1">+ 音效</button>
+                        
+                        <!-- 音效管理条 -->
+                        <div class="flex flex-col items-start gap-1">
+                            <div v-for="(sfx, sIdx) in line.sfx" :key="sIdx" class="flex items-center bg-blue-50 border border-blue-100 rounded px-2 py-1 text-xs">
+                                <span class="mr-1"></span>
+                                <select v-model="sfx.name" class="bg-transparent outline-none border-b border-transparent hover:border-blue-300 text-blue-700 font-medium max-w-[100px] cursor-pointer">
+                                    <option v-for="libSfx in sfxLibrary" :key="libSfx.id" :value="libSfx.name">{{ libSfx.name }}</option>
+                                </select>
+                                <span class="mx-1 text-slate-400">@</span>
+                                <input type="number" v-model="sfx.position" step="0.1" min="0" max="1" class="w-10 bg-transparent text-center outline-none border-b border-transparent hover:border-blue-300" title="插入位置 (0.0 - 1.0)">
+                                <button @click="removeLineSfx(line, sIdx)" class="ml-2 text-slate-400 hover:text-red-500 font-bold">×</button>
                             </div>
+                            <button @click="addLineSfx(line)" class="text-[10px] text-slate-400 hover:text-blue-600 border border-dashed border-slate-300 rounded px-2 py-1 hover:border-blue-400 transition-colors flex items-center gap-1">+ 音效</button>
                         </div>
                         
+                        <div class="flex-grow"></div>
+
                         <!-- 按钮组 -->
                         <div class="flex items-center gap-1">
                             <button @click.stop="generateLineAudio(line)" :disabled="line.isGenerating" title="生成音频" class="text-slate-400 hover:text-indigo-600 disabled:text-slate-300 disabled:cursor-wait p-2">
@@ -616,6 +630,12 @@
                             <button @click="removeScriptLine(index)" title="删除" class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-2">
                                 <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
                              </button>
+                        </div>
+                        </div>
+
+                        <!-- 文本与音效区域 -->
+                        <div class="w-full flex flex-col gap-2 min-w-0">
+                            <textarea v-model="line.text" rows="2" class="w-full h-full bg-transparent border-none focus:ring-0 text-sm text-slate-700 resize-none leading-relaxed py-1.5" @input="autoResizeTextarea($event)"></textarea>
                         </div>
                     </div>
                     </div>
@@ -680,7 +700,7 @@
                 const currentConfigId = ref('');
                 
                 // 表单状态
-                const form = ref({ id: '', name: '', baseUrl: '', model: '', key: '' });
+                const form = ref({ id: '', name: '', baseUrl: '', model: '', key: '', params: '' });
                 const isEditing = ref(false);
 
                 // TTS 配置状态
@@ -1032,7 +1052,7 @@
                 };
 
                 const resetForm = () => {
-                    form.value = { id: '', name: '', baseUrl: '', model: '', key: '' };
+                    form.value = { id: '', name: '', baseUrl: '', model: '', key: '', params: '' };
                     isEditing.value = false;
                 };
 
@@ -2401,10 +2421,21 @@
                         let url = cfg.baseUrl.trim().replace(/\/+$/, '');
                         if (!url.endsWith('/chat/completions')) url += '/chat/completions';
 
+                        let body = { model: cfg.model, messages: [{ role: 'user', content: finalPrompt }], stream: false };
+                        
+                        if (cfg.params) {
+                            try {
+                                const extraParams = JSON.parse(cfg.params);
+                                body = { ...body, ...extraParams };
+                            } catch (e) {
+                                console.warn('解析额外参数失败:', e);
+                            }
+                        }
+
                         const res = await fetch(url, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.key}` },
-                            body: JSON.stringify({ model: cfg.model, messages: [{ role: 'user', content: finalPrompt }], stream: false })
+                            body: JSON.stringify(body)
                         });
 
                         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2529,17 +2560,28 @@
                             url += '/chat/completions';
                         }
 
+                        let body = {
+                            model: cfg.model,
+                            messages: [{ role: 'user', content: prompt.value }],
+                            stream: true
+                        };
+
+                        if (cfg.params) {
+                            try {
+                                const extraParams = JSON.parse(cfg.params);
+                                body = { ...body, ...extraParams };
+                            } catch (e) {
+                                console.warn('解析额外参数失败:', e);
+                            }
+                        }
+
                         const res = await fetch(url, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${cfg.key}`
                             },
-                            body: JSON.stringify({
-                                model: cfg.model,
-                                messages: [{ role: 'user', content: prompt.value }],
-                                stream: true
-                            }),
+                            body: JSON.stringify(body),
                             signal: abortController.value.signal
                         });
 
