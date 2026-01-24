@@ -417,7 +417,7 @@
         <div v-if="activeTab === 'script'" class="flex flex-col lg:flex-row gap-6 items-start">
             
             <!-- 左侧：角色与音色绑定栏 -->
-            <div class="w-full lg:w-80 flex-shrink-0 space-y-4">
+            <div class="w-full lg:w-60 flex-shrink-0 space-y-4">
                 <div class="bg-slate-100 p-4 rounded-xl border border-slate-200">
                     <h3 class="text-sm font-bold text-slate-700 mb-3 flex justify-between items-center">
                         角色列表
@@ -583,26 +583,78 @@
                             <input type="number" v-model="line.break_duration" step="0.1" min="0" class="w-full px-1 py-1.5 text-xs border rounded bg-white focus:ring-1 focus:ring-blue-500 outline-none text-center font-mono text-slate-600" placeholder="0">
                         </div>
 
-                        <!-- 音量控制 (纵向排列) -->
-                        <div class="w-32 flex-shrink-0 flex flex-col justify-center gap-2 px-2 border-l border-slate-100">
-                            <div class="w-full">
-                                <div class="flex justify-between items-center mb-0.5">
-                                    <span class="text-[8px] font-bold text-slate-400 uppercase">台词音量</span>
-                                    <span class="text-[8px] text-slate-400 font-mono">{{ Math.round((line.dialogueVolume || 1) * 100) }}%</span>
+                        <div class="flex-grow"></div>
+
+                        <!-- 右侧控制区 -->
+                        <div class="flex flex-col items-end gap-2">
+                            <div class="flex items-center gap-3">
+                                <!-- 音量控制 (加宽) -->
+                                <div v-if="line.audioUrl" class="w-48 flex-shrink-0 flex flex-col justify-center gap-2 px-2 border-r border-slate-200">
+                                    <div class="w-full">
+                                        <div class="flex justify-between items-center mb-0.5">
+                                            <span class="text-[8px] font-bold text-slate-400 uppercase">台词音量</span>
+                                            <span class="text-[8px] text-slate-400 font-mono">{{ Math.round((line.dialogueVolume || 1) * 100) }}%</span>
+                                        </div>
+                                        <input type="range" v-model="line.dialogueVolume" min="0" max="1" step="0.05" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 block">
+                                    </div>
+                                    <div class="w-full">
+                                        <div class="flex justify-between items-center mb-0.5">
+                                            <span class="text-[8px] font-bold text-slate-400 uppercase">音效音量</span>
+                                            <span class="text-[8px] text-slate-400 font-mono">{{ Math.round((line.sfxVolume || 0.5) * 100) }}%</span>
+                                        </div>
+                                        <input type="range" v-model="line.sfxVolume" min="0" max="1" step="0.05" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 block">
+                                    </div>
                                 </div>
-                                <input type="range" v-model="line.dialogueVolume" min="0" max="1" step="0.05" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 block">
-                            </div>
-                            <div class="w-full">
-                                <div class="flex justify-between items-center mb-0.5">
-                                    <span class="text-[8px] font-bold text-slate-400 uppercase">音效音量</span>
-                                    <span class="text-[8px] text-slate-400 font-mono">{{ Math.round((line.sfxVolume || 0.5) * 100) }}%</span>
+
+                                <!-- 音频波形剪辑条 -->
+                                <div v-if="line.audioUrl" class="w-48 flex-shrink-0 flex flex-col gap-1">
+                                    <div class="flex justify-between items-center px-0.5">
+                                        <span class="text-[8px] font-bold text-slate-400 uppercase">音频剪辑</span>
+                                        <span class="text-[8px] text-slate-400 font-mono">{{ Math.round(((line.trimEnd||1) - (line.trimStart||0)) * 100) }}%</span>
+                                    </div>
+                                    <div :key="line.audioUrl" class="relative w-full bg-slate-100 rounded border border-slate-200 overflow-hidden select-none group/wave" style="height: 32px;">
+                                    <canvas :ref="(el) => drawWaveform(el, line)" width="192" height="32" class="w-full h-full block opacity-60"></canvas>
+                                    
+                                    <!-- 遮罩层与手柄 -->
+                                    <div class="absolute inset-0 pointer-events-none">
+                                        <!-- 阴影遮罩 (被剪掉的部分) -->
+                                        <div class="absolute top-0 bottom-0 left-0 bg-slate-500/30 border-r border-blue-500" :style="{ width: (line.trimStart || 0) * 100 + '%' }"></div>
+                                        <div class="absolute top-0 bottom-0 right-0 bg-slate-500/30 border-l border-red-500" :style="{ width: (1 - (line.trimEnd || 1)) * 100 + '%' }"></div>
+                                        
+                                        <!-- 交互手柄 (扩大点击区域) -->
+                                        <div class="absolute top-0 bottom-0 w-4 -ml-2 cursor-ew-resize pointer-events-auto hover:bg-blue-500/10 transition-colors flex justify-center group/handle" :style="{ left: (line.trimStart || 0) * 100 + '%' }" @mousedown.stop="startDragTrim($event, line, 'start')">
+                                            <div class="w-0.5 h-full bg-blue-500 group-hover/handle:w-1 transition-all"></div>
+                                        </div>
+                                        <div class="absolute top-0 bottom-0 w-4 -ml-2 cursor-ew-resize pointer-events-auto hover:bg-red-500/10 transition-colors flex justify-center group/handle" :style="{ left: (line.trimEnd || 1) * 100 + '%' }" @mousedown.stop="startDragTrim($event, line, 'end')">
+                                            <div class="w-0.5 h-full bg-red-500 group-hover/handle:w-1 transition-all"></div>
+                                        </div>
+                                        
+                                        <!-- 播放进度条 -->
+                                        <div v-if="isAuditioningId === line.id" class="absolute top-0 bottom-0 w-0.5 bg-green-500 z-20 pointer-events-none shadow-[0_0_4px_rgba(34,197,94,0.8)]" :style="{ left: (playbackProgress * 100) + '%' }"></div>
+                                    </div>
+                                    </div>
                                 </div>
-                                <input type="range" v-model="line.sfxVolume" min="0" max="1" step="0.05" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 block">
+
+                                <!-- 按钮组 -->
+                                <div class="flex items-center gap-1">
+                                    <button @click.stop="generateLineAudio(line)" :disabled="line.isGenerating" title="生成音频" class="text-slate-400 hover:text-indigo-600 disabled:text-slate-300 disabled:cursor-wait p-2">
+                                        <svg v-if="line.isGenerating" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        <svg v-else class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd" /></svg>
+                                    </button>
+                                    <button v-if="line.audioUrl" @click.stop="playLineAudio(line)" title="播放" class="text-slate-400 hover:text-green-600 p-2">
+                                        <svg v-if="isAuditioningId === line.id" class="h-4 w-4 animate-pulse text-green-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                                        <svg v-else class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /></svg>
+                                    </button>
+                                    <button @click="removeScriptLine(index)" title="删除" class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-2">
+                                        <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        
+                        </div>
+
                         <!-- 音效管理条 -->
-                        <div class="flex flex-col items-start gap-1">
+                        <div class="flex flex-wrap items-center gap-2 w-full">
                             <div v-for="(sfx, sIdx) in line.sfx" :key="sIdx" class="flex items-center bg-blue-50 border border-blue-100 rounded px-2 py-1 text-xs">
                                 <span class="mr-1"></span>
                                 <select v-model="sfx.name" class="bg-transparent outline-none border-b border-transparent hover:border-blue-300 text-blue-700 font-medium max-w-[100px] cursor-pointer">
@@ -613,24 +665,6 @@
                                 <button @click="removeLineSfx(line, sIdx)" class="ml-2 text-slate-400 hover:text-red-500 font-bold">×</button>
                             </div>
                             <button @click="addLineSfx(line)" class="text-[10px] text-slate-400 hover:text-blue-600 border border-dashed border-slate-300 rounded px-2 py-1 hover:border-blue-400 transition-colors flex items-center gap-1">+ 音效</button>
-                        </div>
-                        
-                        <div class="flex-grow"></div>
-
-                        <!-- 按钮组 -->
-                        <div class="flex items-center gap-1">
-                            <button @click.stop="generateLineAudio(line)" :disabled="line.isGenerating" title="生成音频" class="text-slate-400 hover:text-indigo-600 disabled:text-slate-300 disabled:cursor-wait p-2">
-                                <svg v-if="line.isGenerating" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                <svg v-else class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd" /></svg>
-                            </button>
-                            <button v-if="line.audioUrl" @click.stop="playLineAudio(line)" title="播放" class="text-slate-400 hover:text-green-600 p-2">
-                                <svg v-if="isAuditioningId === line.id" class="h-4 w-4 animate-pulse text-green-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
-                                <svg v-else class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /></svg>
-                            </button>
-                            <button @click="removeScriptLine(index)" title="删除" class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-2">
-                                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
-                             </button>
-                        </div>
                         </div>
 
                         <!-- 文本与音效区域 -->
@@ -690,6 +724,132 @@
 
         createApp({
             setup() {
+                // --- IndexedDB Persistence Logic ---
+                const DB_NAME = 'UnitaleDB';
+                const DB_VERSION = 1;
+                let dbInstance = null;
+                let dbPromise = null;
+
+                const initDB = () => {
+                    if (dbInstance) return Promise.resolve(dbInstance);
+                    if (dbPromise) return dbPromise;
+
+                    dbPromise = new Promise((resolve, reject) => {
+                        const request = indexedDB.open(DB_NAME, DB_VERSION);
+                        request.onerror = (e) => { 
+                            console.error('DB Error', e); 
+                            dbPromise = null;
+                            reject(e); 
+                        };
+                        request.onsuccess = (e) => {
+                            dbInstance = e.target.result;
+                            dbInstance.onclose = () => { dbInstance = null; dbPromise = null; };
+                            dbInstance.onversionchange = () => { dbInstance.close(); dbInstance = null; dbPromise = null; };
+                            resolve(dbInstance);
+                        };
+                        request.onupgradeneeded = (e) => {
+                            const db = e.target.result;
+                            if (!db.objectStoreNames.contains('project')) db.createObjectStore('project');
+                            if (!db.objectStoreNames.contains('assets')) db.createObjectStore('assets');
+                        };
+                    });
+                    return dbPromise;
+                };
+
+                const saveAssetToDB = async (key, blob) => {
+                    try {
+                        if (!dbInstance) await initDB();
+                        return await new Promise((resolve, reject) => {
+                            try {
+                                const tx = dbInstance.transaction('assets', 'readwrite');
+                                tx.objectStore('assets').put(blob, key);
+                                tx.oncomplete = () => resolve();
+                                tx.onerror = (e) => reject(e);
+                            } catch (e) { reject(e); }
+                        });
+                    } catch (e) {
+                        if (e.name === 'InvalidStateError' || (e.message && e.message.includes('closing'))) {
+                            console.warn('DB connection closed, retrying saveAssetToDB...');
+                            dbInstance = null;
+                            dbPromise = null;
+                            await initDB();
+                            return new Promise((resolve, reject) => {
+                                const tx = dbInstance.transaction('assets', 'readwrite');
+                                tx.objectStore('assets').put(blob, key);
+                                tx.oncomplete = () => resolve();
+                                tx.onerror = (e) => reject(e);
+                            });
+                        }
+                        throw e;
+                    }
+                };
+
+                const loadAssetFromDB = async (key) => {
+                    if (!dbInstance) await initDB();
+                    return new Promise((resolve) => {
+                        const tx = dbInstance.transaction('assets', 'readonly');
+                        const req = tx.objectStore('assets').get(key);
+                        req.onsuccess = () => resolve(req.result);
+                        req.onerror = () => resolve(null);
+                    });
+                };
+
+                const saveAssetsBatch = async (items) => {
+                    if (!dbInstance) await initDB();
+                    return new Promise((resolve, reject) => {
+                        const tx = dbInstance.transaction('assets', 'readwrite');
+                        const store = tx.objectStore('assets');
+                        tx.oncomplete = () => resolve();
+                        tx.onerror = (e) => reject(e);
+                        for (const item of items) {
+                            store.put(item.blob, item.key);
+                        }
+                    });
+                };
+
+                const saveProjectToDB = async () => {
+                    if (!dbInstance) await initDB();
+                    
+                    // Prepare data (exclude blobs from JSON, they are in assets store)
+                    // 使用 JSON 序列化深拷贝，去除 Vue 的 Proxy 代理对象，防止 IndexedDB 报错 DataCloneError
+                    const plainScriptLines = scriptLines.value.map(l => {
+                        // Don't save audioUrl (blob url), just the ID implies existence of line_audio_{id}
+                        const { audioUrl, isGenerating, ...rest } = l;
+                        return rest;
+                    });
+
+                    const projectData = JSON.parse(JSON.stringify({
+                        rawScript: rawScript.value,
+                        rawAnalysisResult: rawAnalysisResult.value,
+                        emotionIntensity: emotionIntensity.value,
+                        characters: characters.value,
+                        scriptLines: plainScriptLines,
+                        libraries: {
+                            sfx: sfxLibrary.value,
+                            bgm: bgmLibrary.value,
+                            timbres: timbres.value,
+                            filters: filterLibrary.value,
+                            emotions: emotionPresets.value
+                        },
+                        timestamp: Date.now()
+                    }));
+
+                    return new Promise((resolve, reject) => {
+                        const tx = dbInstance.transaction('project', 'readwrite');
+                        tx.objectStore('project').put(projectData, 'currentState');
+                        tx.oncomplete = () => resolve();
+                        tx.onerror = (e) => reject(e);
+                    });
+                };
+
+                let saveTimeout = null;
+                const triggerAutoSave = () => {
+                    if (saveTimeout) clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(() => {
+                        saveProjectToDB().catch(e => console.warn('Auto-save failed', e));
+                    }, 1000);
+                };
+
                 // 状态
                 const activeTab = ref('script');
                 
@@ -771,6 +931,11 @@
                 const importFileRef = ref(null);
                 let bgmAudioNode = null;
                 let bgmGainNode = null;
+                const playbackProgress = ref(0);
+                let playbackAnimationFrame = null;
+
+                // 剪辑拖拽状态
+                const draggingTrimState = ref(null);
 
                 // 计算当前选中的配置
                 const currentConfig = computed(() => {
@@ -938,12 +1103,83 @@
                     // 仅在导入工程后或添加文件时加载
                 };
 
+                // --- 波形绘制与剪辑逻辑 ---
+                const drawWaveform = async (canvas, line) => {
+                    if (!canvas || !line.audioUrl) return;
+                    const buffer = await loadAudioBuffer(line.audioUrl);
+                    if (!buffer) return;
+
+                    const ctx = canvas.getContext('2d');
+                    const width = canvas.width;
+                    const height = canvas.height;
+                    const data = buffer.getChannelData(0);
+                    const step = Math.ceil(data.length / width);
+                    const amp = height / 2;
+
+                    ctx.clearRect(0, 0, width, height);
+                    ctx.fillStyle = '#94a3b8'; // slate-400
+                    ctx.beginPath();
+                    
+                    for (let i = 0; i < width; i++) {
+                        let min = 1.0;
+                        let max = -1.0;
+                        for (let j = 0; j < step; j++) {
+                            const datum = data[(i * step) + j];
+                            if (datum < min) min = datum;
+                            if (datum > max) max = datum;
+                        }
+                        ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
+                    }
+                };
+
+                const startDragTrim = (e, line, type) => {
+                    draggingTrimState.value = {
+                        lineId: line.id,
+                        type: type, // 'start' or 'end'
+                        startX: e.clientX,
+                        containerWidth: e.target.closest('.relative').offsetWidth,
+                        startVal: type === 'start' ? (line.trimStart || 0) : (line.trimEnd || 1)
+                    };
+                    
+                    const onMove = (ev) => {
+                        if (!draggingTrimState.value) return;
+                        const state = draggingTrimState.value;
+                        const line = scriptLines.value.find(l => l.id === state.lineId);
+                        if (!line) return;
+
+                        const deltaX = ev.clientX - state.startX;
+                        const deltaPercent = deltaX / state.containerWidth;
+                        let newVal = Math.max(0, Math.min(1, state.startVal + deltaPercent));
+
+                        if (state.type === 'start') {
+                            line.trimStart = Math.min(newVal, (line.trimEnd || 1) - 0.01);
+                        } else {
+                            line.trimEnd = Math.max(newVal, (line.trimStart || 0) + 0.01);
+                        }
+                    };
+
+                    const onUp = () => {
+                        window.removeEventListener('mousemove', onMove);
+                        window.removeEventListener('mouseup', onUp);
+                        draggingTrimState.value = null;
+                        triggerAutoSave(); // 保存剪辑结果
+                    };
+
+                    window.addEventListener('mousemove', onMove);
+                    window.addEventListener('mouseup', onUp);
+                };
+
+                // Watchers for Auto-Save
+                watch([rawScript, characters, sfxLibrary, bgmLibrary, timbres, filterLibrary, emotionPresets, emotionIntensity], () => {
+                    triggerAutoSave();
+                }, { deep: true });
+                
+                watch(scriptLines, () => {
+                    triggerAutoSave();
+                }, { deep: true });
+
                 // 读取持久化配置
                 onMounted(async () => {
-                    const savedTab = localStorage.getItem('storyforge_activeTab');
-                    if (savedTab) {
-                        activeTab.value = savedTab;
-                    }
 
                     // 仅保留 LLM 和 TTS 的配置持久化 (API Key 等)
                     const savedList = localStorage.getItem('storyforge_configs');
@@ -962,17 +1198,12 @@
                     // 默认选中第一个
                     if (llmConfigs.value.length > 0) {
                         currentConfigId.value = llmConfigs.value[0].id;
-                    } else {
-                        activeTab.value = 'config'; // 没配置时跳到管理页
                     }
 
                     // 读取 TTS 配置
                     const savedTts = localStorage.getItem('storyforge_tts_configs');
                     if (savedTts) ttsConfigs.value = JSON.parse(savedTts);
                     if (ttsConfigs.value.length > 0) currentTtsConfigId.value = ttsConfigs.value[0].id;
-
-                    // --- 移除所有项目资源的 localStorage 读取 ---
-                    // 刷新页面后，音效、BGM、音色、脚本等全部重置为空，必须通过导入工程恢复
                     
                     // 初始化默认滤波器
                     filterLibrary.value = [
@@ -1002,6 +1233,72 @@
                     const savedUseCustom = localStorage.getItem('storyforge_use_custom_prompt');
                     if (savedUseCustom) {
                         useCustomPrompt.value = JSON.parse(savedUseCustom);
+                    }
+
+                    // --- Restore from IndexedDB ---
+                    try {
+                        if (!dbInstance) await initDB();
+                        
+                        // 1. Load Project Data
+                        const projectData = await new Promise((resolve) => {
+                            const tx = dbInstance.transaction('project', 'readonly');
+                            const req = tx.objectStore('project').get('currentState');
+                            req.onsuccess = () => resolve(req.result);
+                            req.onerror = () => resolve(null);
+                        });
+
+                        if (projectData) {
+                            rawScript.value = projectData.rawScript || '';
+                            rawAnalysisResult.value = projectData.rawAnalysisResult || '';
+                            emotionIntensity.value = projectData.emotionIntensity || 5;
+                            characters.value = projectData.characters || [];
+                            
+                            if (projectData.libraries) {
+                                sfxLibrary.value = projectData.libraries.sfx || [];
+                                bgmLibrary.value = projectData.libraries.bgm || [];
+                                timbres.value = projectData.libraries.timbres || [];
+                                filterLibrary.value = projectData.libraries.filters || [];
+                                emotionPresets.value = projectData.libraries.emotions || [];
+                            }
+
+                            // 2. Restore Assets & Audio
+                            const restoreAssets = async (lib, fileKey) => {
+                                for (const item of lib) {
+                                    const filename = item[fileKey];
+                                    if (filename) {
+                                        const blob = await loadAssetFromDB(filename);
+                                        if (blob) {
+                                            const file = new File([blob], filename, { type: blob.type });
+                                            localFileMap.value.set(filename, file);
+                                            loadAudioBuffer(filename);
+                                        }
+                                    }
+                                }
+                            };
+                            await restoreAssets(sfxLibrary.value, 'filename');
+                            await restoreAssets(bgmLibrary.value, 'filename');
+                            await restoreAssets(timbres.value, 'refPath');
+
+                            // 3. Restore Script Lines
+                            const restoredLines = [];
+                            for (const lineData of projectData.scriptLines) {
+                                // 确保 trimStart/trimEnd 存在
+                                const line = { trimStart: 0, trimEnd: 1, ...lineData, audioUrl: '', isGenerating: false };
+                                
+                                if (line.type === 'dialogue') {
+                                    const audioKey = `line_audio_${line.id}`;
+                                    const blob = await loadAssetFromDB(audioKey);
+                                    if (blob) {
+                                        line.audioUrl = URL.createObjectURL(blob);
+                                    }
+                                }
+                                restoredLines.push(line);
+                            }
+                            scriptLines.value = restoredLines;
+                            console.log('Project state restored from IndexedDB');
+                        }
+                    } catch (e) {
+                        console.error('Failed to restore from IndexedDB', e);
                     }
                 });
 
@@ -1117,6 +1414,8 @@
                         timbreForm.value.refPath = file.name;
                         timbreFile.value = file; // Store the file object
                         localFileMap.value.set(file.name, file);
+                        saveAssetToDB(file.name, file); // Save to DB
+                        triggerAutoSave();
                     }
                     event.target.value = ''; // Reset file input
                 };
@@ -1307,6 +1606,8 @@
                     if (file) {
                         sfxForm.value.filename = file.name;
                         localFileMap.value.set(file.name, file);
+                        saveAssetToDB(file.name, file); // Save to DB
+                        triggerAutoSave();
                         loadAudioBuffer(file.name);
                     }
                 event.target.value = '';
@@ -1358,6 +1659,8 @@
                     if (file) {
                         bgmForm.value.filename = file.name;
                         localFileMap.value.set(file.name, file);
+                        saveAssetToDB(file.name, file); // Save to DB
+                        triggerAutoSave();
                         loadAudioBuffer(file.name);
                     }
                     event.target.value = '';
@@ -1566,9 +1869,14 @@
                         }
 
                         const blob = await synthRes.blob();
+                        // Save generated audio to DB
+                        await saveAssetToDB(`line_audio_${line.id}`, blob);
                         const audioUrl = URL.createObjectURL(blob);
                         
                         line.audioUrl = audioUrl;
+                        // 重置剪辑点
+                        line.trimStart = 0;
+                        line.trimEnd = 1;
 
                     } catch (e) {
                         alert(e.message);
@@ -1634,6 +1942,11 @@
                             dialogueSource = null;
                         }
                         
+                        if (playbackAnimationFrame) {
+                            cancelAnimationFrame(playbackAnimationFrame);
+                            playbackAnimationFrame = null;
+                        }
+                        
                         if (stopPreviousSfx) {
                             sfxSources.forEach(source => { try { source.stop(); } catch(e){} });
                             sfxSources = [];
@@ -1680,6 +1993,13 @@
                             dialogueSource = audioContext.createBufferSource();
                             dialogueSource.buffer = dialogueBuffer;
 
+                            // 计算剪辑参数
+                            const trimStart = line.trimStart || 0;
+                            const trimEnd = line.trimEnd || 1;
+                            const duration = dialogueBuffer.duration;
+                            const startTimeOffset = duration * trimStart;
+                            const playDuration = duration * (trimEnd - trimStart);
+
                             const dialogueGain = audioContext.createGain();
                             dialogueGain.gain.setValueAtTime(line.dialogueVolume ?? 1.0, audioContext.currentTime);
 
@@ -1709,38 +2029,72 @@
                             // Connect to gain then destination
                             lastNode.connect(dialogueGain).connect(audioContext.destination);
                             
-                            const dialogueDuration = dialogueBuffer.duration;
                             const now = audioContext.currentTime + 0.05; // Slight delay for sync
                             
                             // 6. Schedule SFX
                             sfxBuffers.forEach(({ buffer, item }) => {
-                                const sSrc = audioContext.createBufferSource();
-                                sSrc.buffer = buffer;
-                                const sGain = audioContext.createGain();
-                                sGain.gain.setValueAtTime(line.sfxVolume ?? 0.5, now);
-                                sSrc.connect(sGain).connect(audioContext.destination);
-                                
+                                const originalDuration = dialogueBuffer.duration;
+                                const absStart = originalDuration * trimStart;
+                                const absEnd = originalDuration * trimEnd;
                                 const pos = parseFloat(item.position) || 0;
-                                const startT = now + (dialogueDuration * pos);
-                                sSrc.start(startT);
-                                
-                                sfxSources.push(sSrc);
-                                sSrc.onended = () => {
-                                    const idx = sfxSources.indexOf(sSrc);
-                                    if (idx > -1) sfxSources.splice(idx, 1);
-                                };
+                                const absSfxTime = originalDuration * pos;
+
+                                if (absSfxTime >= absStart && absSfxTime <= absEnd) {
+                                    const sSrc = audioContext.createBufferSource();
+                                    sSrc.buffer = buffer;
+                                    const sGain = audioContext.createGain();
+                                    sGain.gain.setValueAtTime(line.sfxVolume ?? 0.5, now);
+                                    sSrc.connect(sGain).connect(audioContext.destination);
+                                    
+                                    const relativeStart = absSfxTime - absStart;
+                                    sSrc.start(now + relativeStart);
+                                    
+                                    sfxSources.push(sSrc);
+                                    sSrc.onended = () => {
+                                        const idx = sfxSources.indexOf(sSrc);
+                                        if (idx > -1) sfxSources.splice(idx, 1);
+                                    };
+                                }
                             });
 
                             // 7. Play dialogue
                             dialogueSource.onended = async () => {
                                 // This event fires on natural end or manual .stop()
+                                if (playbackAnimationFrame) {
+                                    cancelAnimationFrame(playbackAnimationFrame);
+                                    playbackAnimationFrame = null;
+                                }
                                 if (isAuditioningId.value === line.id) {
                                     isAuditioningId.value = null;
                                 }
                                 resolve();
                             };
                             
-                            dialogueSource.start(now);
+                            dialogueSource.start(now, startTimeOffset, playDuration);
+                            
+                            // 启动进度条动画
+                            const updateProgress = () => {
+                                if (isAuditioningId.value !== line.id) return;
+                                const elapsed = audioContext.currentTime - now;
+                                if (elapsed >= 0) {
+                                    // 计算当前在整个文件中的百分比位置
+                                    // 当前位置 = (startTimeOffset + elapsed) / totalDuration
+                                    // startTimeOffset = duration * trimStart
+                                    // => (duration * trimStart + elapsed) / duration
+                                    // => trimStart + (elapsed / duration)
+                                    const progress = trimStart + (elapsed / duration);
+                                    playbackProgress.value = Math.min(progress, trimEnd);
+                                } else {
+                                    playbackProgress.value = trimStart;
+                                }
+                                
+                                if (audioContext.currentTime < now + playDuration) {
+                                    playbackAnimationFrame = requestAnimationFrame(updateProgress);
+                                } else {
+                                    playbackProgress.value = trimEnd;
+                                }
+                            };
+                            playbackAnimationFrame = requestAnimationFrame(updateProgress);
 
                         } catch (e) {
                             console.error("Failed to play audio:", e);
@@ -1858,16 +2212,22 @@
                     reader.onload = async (e) => {
                         try {
                             const data = JSON.parse(e.target.result);
+                            const assetsToSave = []; // 用于批量收集待保存的音频文件
                             
                             // 辅助函数：恢复资源库文件
-                            const restoreLibraryFiles = (libItems, fileKey) => {
+                            const restoreLibraryFiles = async (libItems, fileKey) => {
                                 if (!libItems) return [];
-                                return libItems.map(item => {
+                                const restoredItems = [];
+                                for (const item of libItems) {
                                     if (item._fileData) {
                                         try {
                                             const blob = base64ToBlob(item._fileData, item._mimeType || 'audio/wav');
                                             const file = new File([blob], item[fileKey], { type: item._mimeType || 'audio/wav' });
                                             localFileMap.value.set(item[fileKey], file);
+                                            
+                                            // 优化：收集到批量列表，稍后统一保存
+                                            assetsToSave.push({ key: item[fileKey], blob: file });
+
                                             // 预加载到缓存
                                             loadAudioBuffer(item[fileKey]);
                                             
@@ -1877,19 +2237,33 @@
                                             console.warn(`Failed to restore file: ${item[fileKey]}`, err);
                                         }
                                     }
-                                    return item;
-                                });
+                                    restoredItems.push(item);
+                                }
+                                return restoredItems;
                             };
 
                             if (data.version === '2.0' || data.project) {
                                 // v2.0 完整工程格式
                                 if (!confirm('检测到完整工程文件。导入将覆盖当前的【资源库和脚本】（模型配置不会被覆盖）。确定继续吗？')) return;
 
+                                // --- 清空当前数据 ---
+                                rawScript.value = '';
+                                rawAnalysisResult.value = '';
+                                characters.value = [];
+                                scriptLines.value = [];
+                                sfxLibrary.value = [];
+                                bgmLibrary.value = [];
+                                timbres.value = [];
+                                filterLibrary.value = [];
+                                emotionPresets.value = [];
+                                localFileMap.value.clear();
+                                audioBufferCache.clear();
+
                                 // 2. 恢复资源库
                                 if (data.libraries) {
-                                    sfxLibrary.value = restoreLibraryFiles(data.libraries.sfx, 'filename');
-                                    bgmLibrary.value = restoreLibraryFiles(data.libraries.bgm, 'filename');
-                                    timbres.value = restoreLibraryFiles(data.libraries.timbres, 'refPath');
+                                    sfxLibrary.value = await restoreLibraryFiles(data.libraries.sfx, 'filename');
+                                    bgmLibrary.value = await restoreLibraryFiles(data.libraries.bgm, 'filename');
+                                    timbres.value = await restoreLibraryFiles(data.libraries.timbres, 'refPath');
                                     filterLibrary.value = data.libraries.filters || [];
                                     emotionPresets.value = data.libraries.emotions || [];
 
@@ -1913,12 +2287,23 @@
                                         try {
                                             const res = await fetch(line.audioBase64);
                                             const blob = await res.blob();
+                                            
+                                            // 优化：收集到批量列表
+                                            assetsToSave.push({ key: `line_audio_${line.id}`, blob: blob });
+
                                             line.audioUrl = URL.createObjectURL(blob);
+                                            delete line.audioBase64; // 清理内存
                                         } catch (err) { console.warn('Audio restore failed', err); }
                                     }
                                     return line;
                                 }));
                                 scriptLines.value = restoredLines;
+                                
+                                // 执行批量保存 (一次性写入所有文件)
+                                if (assetsToSave.length > 0) await saveAssetsBatch(assetsToSave);
+                                
+                                // 强制保存一次项目状态到 DB，确保 JSON 数据也同步
+                                await saveProjectToDB();
                                 
                                 alert('完整工程导入成功！所有资源和设置已恢复。');
 
@@ -1955,6 +2340,10 @@
                                             try {
                                                 const res = await fetch(line.audioBase64);
                                                 const blob = await res.blob();
+                                                
+                                                // 优化：收集到批量列表
+                                                assetsToSave.push({ key: `line_audio_${line.id}`, blob: blob });
+
                                                 line.audioUrl = URL.createObjectURL(blob);
                                                 // delete line.audioBase64; // 可选：释放内存，但保留在对象中也没关系
                                             } catch (err) {
@@ -1965,6 +2354,8 @@
                                     }));
 
                                     scriptLines.value = restoredLines;
+                                    if (assetsToSave.length > 0) await saveAssetsBatch(assetsToSave);
+                                    await saveProjectToDB();
                                     alert('存档读取成功！');
                                 }
                             } else {
@@ -2036,10 +2427,15 @@
                             } else if (line.type === 'dialogue') {
                                 const buffer = assets.dialogues[line.id];
                                 if (buffer) {
+                                    // 计算剪辑
+                                    const trimStart = line.trimStart || 0;
+                                    const trimEnd = line.trimEnd || 1;
+                                    const playDuration = buffer.duration * (trimEnd - trimStart);
+
                                     // 模拟 playLineAudio 中的 0.05s 调度延迟，确保导出节奏与实时播放一致
                                     currentTime += 0.05;
-                                    events.push({ type: 'dialogue', time: currentTime, buffer: buffer, line: line });
-                                    currentTime += buffer.duration;
+                                    events.push({ type: 'dialogue', time: currentTime, buffer: buffer, line: line, trimStart, trimEnd, playDuration });
+                                    currentTime += playDuration;
                                 }
                                 currentTime += (line.break_duration || 0);
                             }
@@ -2075,6 +2471,9 @@
                             const dGain = offlineCtx.createGain();
                             dGain.gain.value = evt.line.dialogueVolume ?? 1.0;
 
+                            const offset = evt.buffer.duration * evt.trimStart;
+                            const duration = evt.playDuration;
+
                             let lastNode = dSrc;
                             // 应用滤镜
                             if (evt.line.filter) {
@@ -2097,20 +2496,29 @@
                                 }
                             }
                             lastNode.connect(dGain).connect(offlineCtx.destination);
-                            dSrc.start(evt.time);
+                            dSrc.start(evt.time, offset, duration);
 
                             // 调度音效
                             if (evt.line.sfx) {
                                 evt.line.sfx.forEach(s => {
                                     const sBuffer = assets.sfx[s.name];
                                     if (sBuffer) {
+                                        const originalDuration = evt.buffer.duration;
+                                        const absStart = originalDuration * evt.trimStart;
+                                        const absEnd = originalDuration * evt.trimEnd;
+                                        const pos = parseFloat(s.position) || 0;
+                                        const absSfxTime = originalDuration * pos;
+
+                                        if (absSfxTime >= absStart && absSfxTime <= absEnd) {
                                         const sSrc = offlineCtx.createBufferSource();
                                         sSrc.buffer = sBuffer;
                                         const sGain = offlineCtx.createGain();
                                         sGain.gain.value = evt.line.sfxVolume ?? 0.5;
                                         sSrc.connect(sGain).connect(offlineCtx.destination);
-                                        const pos = parseFloat(s.position) || 0;
-                                        sSrc.start(evt.time + (evt.buffer.duration * pos));
+                                        
+                                        const relativeStart = absSfxTime - absStart;
+                                        sSrc.start(evt.time + relativeStart);
+                                        }
                                     }
                                 });
                             }
@@ -2196,6 +2604,8 @@
                         original_emotion_text: '中立',
                         filter: '',
                         text: text,
+                        trimStart: 0,
+                        trimEnd: 1,
                         sfxVolume: 0.5,
                         dialogueVolume: 1.0,
                         audioUrl: '',
@@ -2229,6 +2639,8 @@
                         original_emotion_text: '中立',
                         filter: '',
                         text: '',
+                        trimStart: 0,
+                        trimEnd: 1,
                         sfx: [],
                         break_duration: 0,
                         sfxVolume: 0.5,
@@ -2410,10 +2822,8 @@
                     const enabledBgm = bgmLibrary.value.filter(b => b.enabled !== false);
                     if (enabledBgm.length > 0) {
                         const bgmList = enabledBgm.map(s => `- ${s.name}: ${s.description}`).join('\n');
-                        bgmSection = `# 背景音乐库 (Background Music)\n你还可以使用以下背景音乐素材：\n${bgmList}\n**注意：必须严格使用列表中的名称。**`;
                         bgmSection = `# 背景音乐库 (Background Music)\n现有以下背景音乐素材可用：\n${bgmList}\n\n**核心指令：**\n1. 必须**逐字匹配**使用列表中的名称。\n2. 如果列表中没有适合当前剧情的音乐，**请勿生成** BGM 播放指令。\n3. **严禁编造**列表中不存在的 BGM 名称。`;
                     } else {
-                        bgmSection = `# 背景音乐库 (Background Music)\n当前背景音乐库为空。\n**注意：请勿生成任何 BGM 控制块。**`;
                         bgmSection = `# 背景音乐库 (Background Music)\n**当前背景音乐库为空 (EMPTY)。**\n\n**核心指令：**\n1. **严禁生成**任何 action="play" 的 BGM 控制块。\n2. 你只能生成 action="stop" 的指令（如果需要停止之前的音乐）。\n3. 绝对不要编造 BGM 名称。`;
                     }
 
@@ -2534,6 +2944,8 @@
                                     filter: matchedFilter,
                                     sfx: item.sfx || [],
                                     break_duration: typeof item.break_duration === 'number' ? item.break_duration : 0,
+                                    trimStart: 0,
+                                    trimEnd: 1,
                                     sfxVolume: 0.5,
                                     dialogueVolume: 1.0,
                                     audioUrl: '',
@@ -2791,7 +3203,7 @@
                     // Actions
                     saveConfig, editConfig, deleteConfig, resetForm,
                     // TTS Actions
-                    ttsConfigs, ttsForm, isEditingTts,
+                    ttsForm, isEditingTts,
                     saveTtsConfig, editTtsConfig, deleteTtsConfig, resetTtsForm,
                     
                     // Character Actions (New)
@@ -2820,9 +3232,12 @@
                     playPreview, previewPlayingFile,
                     send, stopGeneration, clearAll,
 
+                    playbackProgress, // Export for template
+
                     // Script Actions
                     rawScript, scriptLines, splitScript, removeScriptLine, autoResizeTextarea, analyzeScript, isAnalyzingScript, rawAnalysisResult, emotionIntensity,
                     addBgmBlock, addDialogueBlock, selectedLineIndex,
+                    drawWaveform, startDragTrim, // Exported for template
                     generateAllLines, isGeneratingAll,
                     moveLineUp, moveLineDown,
                     exportScriptState, triggerImport, handleImportFile, importFileRef, exportAudio, isExportingAudio,
