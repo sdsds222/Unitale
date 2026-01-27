@@ -461,11 +461,11 @@
                         <input v-model="emotionIntensity" type="range" min="1" max="10" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
                     </div>
                     <div class="md:col-span-2 flex flex-wrap items-end gap-2 pb-1">
-                        <button @click="exportScriptState" class="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-200 transition-all flex items-center gap-1">
-                            导出完整工程
+                        <button @click="exportScriptState" :disabled="isExportingProject" class="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-200 transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait">
+                            {{ isExportingProject ? exportStatus : '导出完整工程' }}
                         </button>
-                        <button @click="triggerImport" class="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-200 transition-all flex items-center gap-1">
-                            导入完整工程
+                        <button @click="triggerImport" :disabled="isExportingProject" class="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-200 transition-all flex items-center gap-1 disabled:opacity-50">
+                            {{ isExportingProject ? '请等待...' : '导入完整工程' }}
                         </button>
                         <button @click="exportAudio" :disabled="isExportingAudio" class="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold hover:bg-purple-200 transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait">
                             {{ isExportingAudio ? '⏳ 处理中...' : '导出音频' }}
@@ -796,15 +796,45 @@
 
                 const saveAssetsBatch = async (items) => {
                     if (!dbInstance) await initDB();
-                    return new Promise((resolve, reject) => {
-                        const tx = dbInstance.transaction('assets', 'readwrite');
-                        const store = tx.objectStore('assets');
-                        tx.oncomplete = () => resolve();
-                        tx.onerror = (e) => reject(e);
-                        for (const item of items) {
-                            store.put(item.blob, item.key);
+                    
+                    // 1. 去重
+                    const uniqueMap = new Map();
+                    items.forEach(item => uniqueMap.set(item.key, item.blob));
+                    const entries = Array.from(uniqueMap.entries());
+                    
+                    // 2. 分块保存 (Chunking) - 关键修复：避免一次性事务过大导致崩溃
+                    const BATCH_SIZE = 5; 
+                    
+                    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+                        const chunk = entries.slice(i, i + BATCH_SIZE);
+                        
+                        // 为每个块添加重试机制
+                        let retries = 3;
+                        while (retries > 0) {
+                            try {
+                                await new Promise((resolve, reject) => {
+                                    const tx = dbInstance.transaction('assets', 'readwrite');
+                                    const store = tx.objectStore('assets');
+                                    tx.oncomplete = () => resolve();
+                                    tx.onerror = (e) => reject(e);
+                                    tx.onabort = (e) => reject(e);
+                                    
+                                    for (const [key, blob] of chunk) {
+                                        store.put(blob, key);
+                                    }
+                                });
+                                break; // 成功则跳出重试循环
+                            } catch (e) {
+                                console.warn(`Batch save failed (chunk ${i}), retrying...`, e);
+                                retries--;
+                                if (retries === 0) throw e; // 重试耗尽，抛出错误
+                                // 尝试重置连接
+                                dbInstance = null;
+                                dbPromise = null;
+                                await initDB();
+                            }
                         }
-                    });
+                    }
                 };
 
                 const saveProjectToDB = async () => {
@@ -929,6 +959,8 @@
                 let sequenceAbortController = null;
                 const isExportingAudio = ref(false);
                 const importFileRef = ref(null);
+                const isExportingProject = ref(false);
+                const exportStatus = ref('');
                 let bgmAudioNode = null;
                 let bgmGainNode = null;
                 const playbackProgress = ref(0);
@@ -1916,6 +1948,7 @@
                         if (failedCount > 0) {
                              alert(`一键生成完成，但有 ${failedCount} 条台词生成失败。请检查控制台或单独重新生成失败的台词。`);
                         } else {
+                            await saveProjectToDB(); // 强制保存一次项目状态
                             alert('所有台词音频已成功生成！');
                         }
 
@@ -2128,22 +2161,46 @@
                 const exportScriptState = async () => {
                     if (!confirm('即将导出包含所有素材（音效、BGM、音色）的完整工程文件。如果素材较多，文件可能较大，请耐心等待。')) return;
 
+                    isExportingProject.value = true;
+                    exportStatus.value = '准备中...';
+
+                    try {
                     // 1. 处理资源库 (嵌入音频文件)
                     const processLibrary = async (lib, fileKey) => {
-                        return Promise.all(lib.map(async (item) => {
+                        const processed = [];
+                        for (let i = 0; i < lib.length; i++) {
+                            const item = lib[i];
+                            // 进度提示 & 让出主线程防止卡死
+                            if (i % 5 === 0) {
+                                exportStatus.value = `打包资源 ${i}/${lib.length}`;
+                                await new Promise(r => setTimeout(r, 0));
+                            }
+
                             const itemCopy = { ...item };
                             const filename = item[fileKey];
-                            if (filename && localFileMap.value.has(filename)) {
+                            if (filename) {
+                                let blob = null;
+                                // 1. 优先从内存 Map 获取 (File 对象)
+                                if (localFileMap.value.has(filename)) {
+                                    blob = localFileMap.value.get(filename);
+                                }
+                                // 2. 如果内存没有，尝试从 IndexedDB 读取 (Blob)
+                                if (!blob) {
+                                    blob = await loadAssetFromDB(filename);
+                                }
+                                
+                                if (blob) {
                                 try {
-                                    const file = localFileMap.value.get(filename);
-                                    itemCopy._fileData = await blobToBase64(file);
-                                    itemCopy._mimeType = file.type;
+                                    itemCopy._fileData = await blobToBase64(blob);
+                                    itemCopy._mimeType = blob.type;
                                 } catch (e) {
                                     console.warn(`Failed to embed file: ${filename}`, e);
                                 }
+                                }
                             }
-                            return itemCopy;
-                        }));
+                            processed.push(itemCopy);
+                        }
+                        return processed;
                     };
 
                     const sfxExport = await processLibrary(sfxLibrary.value, 'filename');
@@ -2151,21 +2208,46 @@
                     const timbreExport = await processLibrary(timbres.value, 'refPath');
 
                     // 将音频转换为 Base64 以便保存
-                    const linesToSave = await Promise.all(scriptLines.value.map(async (line) => {
+                    const linesToSave = [];
+                    const totalLines = scriptLines.value.length;
+                    
+                    for (let i = 0; i < totalLines; i++) {
+                        const line = scriptLines.value[i];
+                        
+                        if (i % 5 === 0) {
+                            exportStatus.value = `打包台词 ${i}/${totalLines}`;
+                            await new Promise(r => setTimeout(r, 0));
+                        }
+
                         const lineCopy = { ...line };
                         lineCopy.isGenerating = false; // 清理状态
-                        if (line.audioUrl && line.audioUrl.startsWith('blob:')) {
+                        
+                        // 尝试获取音频 Blob (优先 fetch URL，失败则查 DB)
+                        let blob = null;
+                        if (line.audioUrl) {
                             try {
                                 const res = await fetch(line.audioUrl);
-                                const blob = await res.blob();
+                                blob = await res.blob();
+                            } catch (e) { /* ignore */ }
+                        }
+                        
+                        if (!blob && line.type === 'dialogue') {
+                            blob = await loadAssetFromDB(`line_audio_${line.id}`);
+                        }
+
+                        if (blob) {
+                            try {
                                 lineCopy.audioBase64 = await blobToBase64(blob);
                                 lineCopy.audioUrl = ''; // 导出时不保存 blob URL
                             } catch (e) {
                                 console.warn('导出音频失败:', line.id, e);
                             }
                         }
-                        return lineCopy;
-                    }));
+                        linesToSave.push(lineCopy);
+                    }
+
+                    exportStatus.value = '生成文件...';
+                    await new Promise(r => setTimeout(r, 50)); // 给 UI 一点时间刷新
 
                     const data = {
                         version: '2.0',
@@ -2198,6 +2280,13 @@
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
+                    } catch (e) {
+                        console.error(e);
+                        alert('导出失败: ' + e.message);
+                    } finally {
+                        isExportingProject.value = false;
+                        exportStatus.value = '';
+                    }
                 };
 
                 const triggerImport = () => {
@@ -2211,6 +2300,9 @@
                     const reader = new FileReader();
                     reader.onload = async (e) => {
                         try {
+                            isExportingProject.value = true; // 复用 loading 状态
+                            exportStatus.value = '解析中...';
+
                             const data = JSON.parse(e.target.result);
                             const assetsToSave = []; // 用于批量收集待保存的音频文件
                             
@@ -2282,7 +2374,12 @@
                                 characters.value = proj.characters || [];
 
                                 // 恢复台词音频
-                                const restoredLines = await Promise.all(proj.scriptLines.map(async (line) => {
+                                exportStatus.value = '恢复台词音频...';
+                                const restoredLines = [];
+                                for (let i = 0; i < proj.scriptLines.length; i++) {
+                                    const line = proj.scriptLines[i];
+                                    if (i % 20 === 0) exportStatus.value = `恢复台词 ${i}/${proj.scriptLines.length}`;
+                                    
                                     if (line.audioBase64) {
                                         try {
                                             const res = await fetch(line.audioBase64);
@@ -2295,11 +2392,12 @@
                                             delete line.audioBase64; // 清理内存
                                         } catch (err) { console.warn('Audio restore failed', err); }
                                     }
-                                    return line;
-                                }));
+                                    restoredLines.push(line);
+                                }
                                 scriptLines.value = restoredLines;
                                 
                                 // 执行批量保存 (一次性写入所有文件)
+                                exportStatus.value = '写入数据库...';
                                 if (assetsToSave.length > 0) await saveAssetsBatch(assetsToSave);
                                 
                                 // 强制保存一次项目状态到 DB，确保 JSON 数据也同步
@@ -2335,7 +2433,9 @@
                                     }
                                     
                                     // 恢复音频数据 (Base64 -> Blob URL)
-                                    const restoredLines = await Promise.all(data.scriptLines.map(async (line) => {
+                                    exportStatus.value = '恢复旧版数据...';
+                                    const restoredLines = [];
+                                    for (const line of data.scriptLines) {
                                         if (line.audioBase64) {
                                             try {
                                                 const res = await fetch(line.audioBase64);
@@ -2350,10 +2450,12 @@
                                                 console.warn('恢复音频失败:', line.id, err);
                                             }
                                         }
-                                        return line;
-                                    }));
+                                        restoredLines.push(line);
+                                    }
 
                                     scriptLines.value = restoredLines;
+                                    
+                                    exportStatus.value = '保存中...';
                                     if (assetsToSave.length > 0) await saveAssetsBatch(assetsToSave);
                                     await saveProjectToDB();
                                     alert('存档读取成功！');
@@ -2363,6 +2465,9 @@
                             }
                         } catch (err) {
                             alert('读取失败: ' + err.message);
+                        } finally {
+                            isExportingProject.value = false;
+                            exportStatus.value = '';
                         }
                         event.target.value = ''; // Reset
                     };
@@ -2597,7 +2702,7 @@
                         .filter(l => l.length > 0);
 
                     scriptLines.value = lines.map(text => ({
-                        id: Date.now() + Math.random(),
+                        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
                         type: 'dialogue',
                         role: '旁白', 
                         emotion_text: '中立',
@@ -2615,7 +2720,7 @@
 
                 const addBgmBlock = () => {
                     const newBlock = {
-                        id: Date.now() + Math.random(),
+                        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
                         type: 'bgm',
                         action: 'play',
                         volume: 0.4,
@@ -2632,7 +2737,7 @@
 
                 const addDialogueBlock = () => {
                     const newBlock = {
-                        id: Date.now() + Math.random(),
+                        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
                         type: 'dialogue',
                         role: '旁白', 
                         emotion_text: '中立',
@@ -2918,23 +3023,52 @@
                             characters.value = newCharacterList;
 
                             scriptLines.value = validParsed.map(item => {
-                                // 智能匹配滤波器名称 (防止 AI 输出不完全匹配的名称导致下拉框不显示)
+                                // 通用模糊匹配函数
+                                const findBestMatch = (target, library) => {
+                                    if (!target) return '';
+                                    const t = target.trim().toLowerCase();
+                                    // 1. 精确匹配
+                                    const exact = library.find(i => i.name.toLowerCase() === t);
+                                    if (exact) return exact.name;
+                                    
+                                    // 2. 模糊匹配 (包含关系)
+                                    const candidates = library.filter(i => {
+                                        const n = i.name.toLowerCase();
+                                        return n.includes(t) || t.includes(n);
+                                    });
+                                    
+                                    if (candidates.length > 0) {
+                                        // 按长度差排序，找最接近的
+                                        candidates.sort((a, b) => Math.abs(a.name.length - target.length) - Math.abs(b.name.length - target.length));
+                                        return candidates[0].name;
+                                    }
+                                    return '';
+                                };
+
+                                // 1. 匹配滤波器
                                 let matchedFilter = '';
                                 if (item.filter) {
-                                    const target = item.filter.trim();
-                                    // 1. 尝试精确匹配
-                                    const exact = filterLibrary.value.find(f => f.name === target);
-                                    if (exact) {
-                                        matchedFilter = exact.name;
-                                    } else {
-                                        // 2. 尝试模糊匹配 (例如 AI 输出 "电话音" 但库里是 "电话音 (Telephone)")
-                                        const fuzzy = filterLibrary.value.find(f => f.name.includes(target) || target.includes(f.name));
-                                        if (fuzzy) matchedFilter = fuzzy.name;
-                                    }
+                                    matchedFilter = findBestMatch(item.filter, filterLibrary.value);
+                                }
+
+                                // 2. 匹配音效
+                                let matchedSfx = [];
+                                if (item.sfx && Array.isArray(item.sfx)) {
+                                    matchedSfx = item.sfx.map(s => ({
+                                        name: findBestMatch(s.name, sfxLibrary.value) || s.name,
+                                        position: s.position
+                                    }));
+                                }
+
+                                // 3. 匹配 BGM
+                                let matchedBgmName = '';
+                                if (item.type === 'bgm' && item.action === 'play') {
+                                    const rawName = item.name || item.bgmName || '';
+                                    matchedBgmName = findBestMatch(rawName, bgmLibrary.value) || rawName;
                                 }
 
                                 return {
-                                    id: Date.now() + Math.random(),
+                                    id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
                                     type: item.type || 'dialogue',
                                     // Dialogue fields
                                     role: item.role_name || item.role || '旁白',
@@ -2942,7 +3076,7 @@
                                     emotion_text: item.emotion_text || item.emotion || '中立',
                                     original_emotion_text: item.emotion_text || item.emotion || '中立',
                                     filter: matchedFilter,
-                                    sfx: item.sfx || [],
+                                    sfx: matchedSfx,
                                     break_duration: typeof item.break_duration === 'number' ? item.break_duration : 0,
                                     trimStart: 0,
                                     trimEnd: 1,
@@ -2953,7 +3087,7 @@
                                     // BGM fields
                                     action: item.action || 'play',
                                     volume: 0.4,
-                                    bgmName: item.name || item.bgmName || ''
+                                    bgmName: matchedBgmName
                                 };
                             });
                         } else {
@@ -3240,7 +3374,8 @@
                     drawWaveform, startDragTrim, // Exported for template
                     generateAllLines, isGeneratingAll,
                     moveLineUp, moveLineDown,
-                    exportScriptState, triggerImport, handleImportFile, importFileRef, exportAudio, isExportingAudio,
+                    exportScriptState, triggerImport, handleImportFile, importFileRef, exportAudio, isExportingAudio, 
+                    isExportingProject, exportStatus,
                     playScriptSequentially, stopScriptSequentially, isSequencePlaying, currentSequenceIndex,
 
                     customPromptTemplate, useCustomPrompt, savePrompt, resetPrompt,
