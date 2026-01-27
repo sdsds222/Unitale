@@ -1138,6 +1138,11 @@
                 // --- 波形绘制与剪辑逻辑 ---
                 const drawWaveform = async (canvas, line) => {
                     if (!canvas || !line.audioUrl) return;
+                    
+                    // 性能优化：如果 URL 没变，且 Canvas 已经绘制过，则跳过重绘
+                    if (canvas._lastUrl === line.audioUrl) return;
+                    canvas._lastUrl = line.audioUrl;
+
                     const buffer = await loadAudioBuffer(line.audioUrl);
                     if (!buffer) return;
 
