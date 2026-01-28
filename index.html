@@ -1025,6 +1025,7 @@
 
 ## 1. 拆分与识别
 - **完整保留**: 必须完整保留原文内容，不得遗漏、删改或省略任何字句。
+- **严禁删改**: **绝对禁止**删除原文中的说话人提示语（如“他低声说”、“笑着问道”）。这些内容必须作为“旁白”单独提取出来。
 - **内容提取**: 提取对话内容和所有非对话的旁白。
 - **角色识别**: 根据小说内容分析说话人。旁白的角色名统一标记为“旁白”。
 
@@ -1083,10 +1084,14 @@
 ## 输出:
 [
 \${bgmExampleLine}
-  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！那是昨晚值班的小张打来的。", "emotion_text": "紧张，急切", "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白。我愣住了，看着办公桌上疯狂震动的座机。", "emotion_text": "中立", "break_duration": 0.5\${sfxExample}},
+  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion_text": "紧张，急切", "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion_text": "中立", "break_duration": 0},
+  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion_text": "紧张，急切", "break_duration": 0.5},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion_text": "中立", "break_duration": 0\${sfxExample}},
   {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion_text": "疑惑，迟疑", "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "老李", "text_content": "对，所以，别接。如果你接了，他会问你为什么不救他。", "emotion_text": "低沉，压抑", "break_duration": 0}
+  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion_text": "低沉，压抑", "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion_text": "中立", "break_duration": 0},
+  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion_text": "低沉，压抑", "break_duration": 0}
 ]
 
 # 输入内容
