@@ -45,10 +45,10 @@
     <div id="app" class="w-full max-w-[96%] mx-auto p-6 rounded-2xl shadow-2xl">
         <header class="mb-6 flex justify-between items-end">
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">Unitale <span class="text-blue-600">1.2.2</span></h1>
+                <h1 class="text-2xl font-bold text-slate-800">Unitale <span class="text-blue-600">1.2.3</span></h1>
                 <p style="color: rgb(39, 92, 120);" class="text-slate-400 text-xs mt-1">多角色音效有声书生成工具</p>
             </div>
-            <div class="text-[10px] text-slate-300">v1.2.2</div>
+            <div class="text-[10px] text-slate-300">v1.2.3</div>
         </header>
         
         <!-- 标签页导航 -->
@@ -240,24 +240,31 @@
                         <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">情绪名称</label>
                         <input v-model="emotionForm.name" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如: 开心 / 愤怒">
                     </div>
-                    <div>
-                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">情绪描述文本</label>
-                        <input v-model="emotionForm.text" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如: 悲伤，带着哭腔">
+                    <div class="md:col-span-2">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-2">8维情感向量 (对应: 高兴, 生气, 伤心, 害怕, 厌恶, 低落, 惊喜, 平静) <span class="text-slate-400 font-normal ml-2 normal-case">提示：所有值必须在 0.0 到 1.0 之间</span></label>
+                        <div class="grid grid-cols-4 md:grid-cols-8 gap-2">
+                            <div v-for="(val, idx) in 8" :key="idx" class="flex flex-col items-center">
+                                <span class="text-[8px] text-slate-400 mb-1">{{ ['高兴','生气','伤心','害怕','厌恶','低落','惊喜','平静'][idx] }}</span>
+                                <input type="number" step="0.1" min="0" max="1" v-model.number="emotionForm.vector[idx]" class="w-full px-1 py-1 border rounded text-xs text-center focus:ring-1 focus:ring-blue-500" placeholder="0">
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="flex gap-2">
                     <button type="button" @click.prevent="saveEmotion" class="px-4 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all">保存情绪</button>
                     <button type="button" v-if="isEditingEmotion" @click="resetEmotionForm" class="px-4 py-2 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-300 transition-all">取消</button>
-                    <button type="button" @click="resetEmotionsToDefault" class="px-4 py-2 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all ml-auto">恢复默认预设</button>
                 </div>
             </div>
 
             <!-- 情绪列表 -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div v-for="emo in emotionPresets" :key="emo.id" class="p-3 bg-white border border-slate-200 rounded-xl hover:shadow-sm transition-shadow flex justify-between items-center">
-                    <div>
-                        <div class="font-bold text-slate-800 text-sm">{{ emo.name }}</div>
-                        <div class="text-[10px] text-slate-400 mt-1 truncate w-48">{{ emo.text }}</div>
+                <div v-for="emo in emotionPresets.filter(e => !isSystemEmotion(e.name))" :key="emo.id" class="p-3 bg-white border border-slate-200 rounded-xl hover:shadow-sm transition-shadow flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" v-model="emo.enabled" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer" title="启用/禁用此情绪">
+                        <div>
+                            <div class="font-bold text-slate-800 text-sm">{{ emo.name }}</div>
+                            <div class="text-[8px] text-slate-400 mt-1 font-mono tracking-tighter" v-if="emo.vector">[{{ emo.vector.join(',') }}]</div>
+                        </div>
                     </div>
                     <div class="flex gap-2">
                         <button @click="editEmotion(emo)" class="text-xs text-blue-600 hover:underline">编辑</button>
@@ -445,7 +452,7 @@
                         角色列表
                         <button @click="addCharacter" class="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700">+ 新增</button>
                     </h3>
-                    <div class="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                    <div class="space-y-3 pr-1">
                         <div v-for="char in characters" :key="char.id" class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-sm space-y-2">
                             <div class="flex justify-between items-center">
                                 <input v-model="char.name" class="font-bold text-slate-800 w-2/3 bg-transparent border-b border-transparent focus:border-blue-500 outline-none px-1" placeholder="角色名">
@@ -474,15 +481,8 @@
                     <h3 class="text-sm font-bold text-slate-700">1. 输入原文 / 小说片段</h3>
                 </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <div>
-                        <div class="flex justify-between items-center mb-2">
-                            <label class="text-[10px] font-bold text-slate-500 uppercase">全局感情强度</label>
-                            <span class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{{ emotionIntensity }} / 10</span>
-                        </div>
-                        <input v-model="emotionIntensity" type="range" min="1" max="10" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
-                    </div>
-                    <div class="md:col-span-2 flex flex-wrap items-end gap-2 pb-1">
+                <div class="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <div class="flex flex-wrap items-center gap-2">
                         <button @click="exportScriptState" :disabled="isExportingProject" class="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-200 transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait">
                             {{ isExportingProject ? exportStatus : '导出完整工程' }}
                         </button>
@@ -598,12 +598,17 @@
 
                         <!-- 情绪描述 -->
                         <div class="w-36 flex-shrink-0 space-y-1 flex flex-col justify-center">
-                            <select :value="getEmotionSelectValue(line)" @change="applyPresetToLine(line, $event)" class="w-full px-2 py-1.5 text-xs border rounded bg-white focus:ring-1 focus:ring-blue-500 outline-none text-slate-600">
-                                <option value="">AI生成</option>
-                                <option v-for="preset in emotionPresets" :key="preset.id" :value="preset.text">{{ preset.name }}</option>
-                                <option value="custom_option" disabled hidden></option>
+                            <select v-model="line.emotion" class="w-full px-2 py-1.5 text-xs border rounded bg-white focus:ring-1 focus:ring-blue-500 outline-none text-slate-700 font-bold">
+                                <option value="" disabled>选择情绪</option>
+                                <option v-for="preset in emotionPresets" :key="preset.id" :value="preset.name">{{ preset.name }}</option>
                             </select>
-                            <input v-model="line.emotion_text" class="w-full px-2 py-1 text-xs border rounded bg-white focus:ring-1 focus:ring-blue-500 outline-none text-slate-700" placeholder="情绪描述文本">
+                            <select v-model="line.intensity" v-if="isSystemEmotion(line.emotion)" class="w-full px-2 py-1 text-xs border rounded bg-slate-50 focus:ring-1 focus:ring-blue-500 outline-none text-slate-600">
+                                <option value="微弱">微弱 (0.2)</option>
+                                <option value="稍弱">稍弱 (0.35)</option>
+                                <option value="中等">中等 (0.5)</option>
+                                <option value="较强">较强 (0.75)</option>
+                                <option value="强烈">强烈 (1.0)</option>
+                            </select>
                         </div>
 
                         <!-- 停顿间隔 -->
@@ -735,7 +740,7 @@
 
                 <textarea v-model="customPromptTemplate" :disabled="!useCustomPrompt" :class="['w-full h-[60vh] p-3 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none mb-3', !useCustomPrompt ? 'bg-slate-100 text-slate-400' : 'bg-white text-slate-700']" spellcheck="false"></textarea>
                 <div class="mt-2 text-xs text-slate-500">
-                    <span class="font-bold">可用变量:</span> ${emotionIntensity}, ${sfxSection}, ${bgmSection}, ${bgmExampleLine}, ${sfxExample}, ${rawScript}
+                    <span class="font-bold">可用变量:</span> ${sfxSection}, ${bgmSection}, ${bgmExampleLine}, ${sfxExample}, ${rawScript}
                 </div>
             </div>
         </div>
@@ -753,6 +758,19 @@
 
         createApp({
             setup() {
+                // --- System Emotions Definition ---
+                const SYSTEM_EMOTIONS = [
+                    { id: 'sys_1', name: '高兴', vector: [1, 0, 0, 0, 0, 0, 0, 0] },
+                    { id: 'sys_2', name: '生气', vector: [0, 1, 0, 0, 0, 0, 0, 0] },
+                    { id: 'sys_3', name: '伤心', vector: [0, 0, 1, 0, 0, 0, 0, 0] },
+                    { id: 'sys_4', name: '害怕', vector: [0, 0, 0, 1, 0, 0, 0, 0] },
+                    { id: 'sys_5', name: '厌恶', vector: [0, 0, 0, 0, 1, 0, 0, 0] },
+                    { id: 'sys_6', name: '低落', vector: [0, 0, 0, 0, 0, 1, 0, 0] },
+                    { id: 'sys_7', name: '惊喜', vector: [0, 0, 0, 0, 0, 0, 1, 0] },
+                    { id: 'sys_8', name: '平静', vector: [0, 0, 0, 0, 0, 0, 0, 1] }
+                ];
+                const isSystemEmotion = (name) => SYSTEM_EMOTIONS.some(e => e.name === name);
+
                 // --- IndexedDB Persistence Logic ---
                 const DB_NAME = 'UnitaleDB';
                 const DB_VERSION = 1;
@@ -880,7 +898,6 @@
                     const projectData = JSON.parse(JSON.stringify({
                         rawScript: rawScript.value,
                         rawAnalysisResult: rawAnalysisResult.value,
-                        emotionIntensity: emotionIntensity.value,
                         characters: characters.value,
                         scriptLines: plainScriptLines,
                         libraries: {
@@ -939,7 +956,7 @@
 
                 // 情绪预设状态
                 const emotionPresets = ref([]);
-                const emotionForm = ref({ id: '', name: '', text: '' });
+                const emotionForm = ref({ id: '', name: '', vector: [0,0,0,0,0,0,0,0] });
                 const isEditingEmotion = ref(false);
 
                 // 音效库状态
@@ -980,7 +997,6 @@
                 const scriptLines = ref([]);
                 const isAnalyzingScript = ref(false);
                 const rawAnalysisResult = ref('');
-                const emotionIntensity = ref(5);
                 const selectedLineIndex = ref(-1);
                 const isGeneratingAll = ref(false);
                 const isSequencePlaying = ref(false);
@@ -1006,20 +1022,24 @@
 
                 // Prompt Template
                 const defaultPromptTemplate = `你的任务是将给定小说内容拆分为台词和旁白，并自动识别每一句台词的角色和情绪。
-**注意：生成的结果将直接用于 IndexTTS 语音合成系统，请确保情绪描述精准且符合语音合成的提示规范。**
-
-# 全局设置
-- **感情强度等级**: \${emotionIntensity} / 10
-  - 请根据此强度调整 \`emotion_text\` 的用词力度。
-  - 强度较低时(1-3)：必须极其克制，接近中性。多使用“平淡”、“冷静”、“毫无波澜”、“客观”等词汇。除非原文有极强的爆发，否则一律处理为微弱情绪。
-  - 强度适中时(4-7)：情绪自然流露，但不要过分夸张（如：有些生气、开心、疑惑）。
-  - 强度较高时(8-10)：情绪强烈、饱满、极具张力（如：歇斯底里地咆哮、极度狂喜、痛哭流涕）。
+**注意：生成的结果将直接用于 IndexTTS 语音合成系统，请严格从指定的情绪列表中选择，不要自行生成情绪描述文本。**
 
 \${sfxSection}
 
 \${bgmSection}
 
 \${filterSection}
+
+# 情绪与强度设置 (Emotion & Intensity)
+请为每一句台词（包括旁白）选择一个最合适的情绪和强度。
+
+1. **可选情绪 (Emotion)**: \${emotionList}
+   - **注意**: 必须严格从上述列表中选择，**严禁**编造列表之外的情绪名称。
+   - 旁白通常选择 "平静"，也可根据氛围选择其他情绪。
+
+2. **可选强度 (Intensity)**: 微弱, 稍弱, 中等, 较强, 强烈
+   - 请根据上下文判断情绪的强烈程度。
+   - **旁白强度**: 如果旁白有情绪（如伤心、害怕），强度必须很弱（建议选择 "微弱" 或 "稍弱"）。如果旁白是 "平静" 情绪，强度应为 "中等"。
 
 # 规则
 
@@ -1029,14 +1049,6 @@
 - **内容提取**: 提取对话内容和所有非对话的旁白。
 - **角色识别**: 根据小说内容分析说话人。旁白的角色名统一标记为“旁白”。
 - **旁白合并**: 连续的旁白内容（描写、叙述）应合并为一条记录，**不要**按句号拆分得太细，除非中间需要插入音效或有极长的时间跳跃。保持旁白的连贯性。
-
-## 2. 情绪识别 (emotion_text)
-- **情绪描述**: 根据上下文语境，为每条内容生成一段简短的情绪描述文本。
-    - 格式: 字符串。
-    - **长度限制**: **必须非常简短，严格控制在 2-6 个字以内**。
-    - **用词规范**: **所有情绪描述必须克制、微弱、内敛**。即使是强烈的情绪，也请用“微”、“略”、“淡淡”等词修饰，避免过于夸张。
-    - 内容: 描述说话人的语气、情感状态。例如：“略显生气”、“淡淡忧伤”、“冷静”、“微弱惊讶”。
-    - 旁白情绪: **强制规则**：如果角色是“旁白”，\`emotion_text\` **必须** 填写为 “中立”。**绝对禁止** 为旁白添加任何其他情绪描述（如“悲伤”、“紧张”等）。旁白必须是完全客观、冷静的叙述。
 
 ## 3. 音效插入 (sfx)
 - 如果情节需要（如“摔门而去”、“雷声大作”），且音效库中有对应素材，请在 JSON 对象中添加 \`sfx\` 字段。
@@ -1072,7 +1084,7 @@
 ## 6. 输出格式
 - **严格 JSON**: 输出格式必须是严格的 JSON 数组，不包含任何额外说明或代码块标记。
 - **数组元素**: 必须是以下两种对象之一：
-  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "...", "emotion_text": "...", "break_duration": 0, "filter": "...", "sfx": [...]}\`
+  1. **台词对象**: \`{"type": "dialogue", "role_name": "...", "text_content": "...", "emotion": "...", "intensity": "...", "break_duration": 0, "filter": "...", "sfx": [...]}\`
   2. **BGM对象**: \`{"type": "bgm", "action": "play", "name": "..."}\` 或 \`{"type": "bgm", "action": "stop"}\`
   - **严禁生成** \`{"type": "sfx", ...}\` 这种独立音效块。音效必须包含在台词对象的 \`sfx\` 字段中。
 
@@ -1087,14 +1099,14 @@
 ## 输出:
 [
 \${bgmExampleLine}
-  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion_text": "紧张，急切", "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion_text": "中立", "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion_text": "紧张，急切", "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion_text": "中立", "break_duration": 0\${sfxExample}},
-  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion_text": "疑惑，迟疑", "break_duration": 0.5},
-  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion_text": "低沉，压抑", "break_duration": 0},
-  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion_text": "中立", "break_duration": 0},
-  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion_text": "低沉，压抑", "break_duration": 0}
+  {"type": "dialogue", "role_name": "老李", "text_content": "别接那个电话！", "emotion": "害怕", "intensity": "强烈", "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李猛地按住了我的手，脸色惨白，", "emotion": "平静", "intensity": "中等", "break_duration": 0},
+  {"type": "dialogue", "role_name": "老李", "text_content": "那是昨晚值班的小张打来的。", "emotion": "害怕", "intensity": "较强", "break_duration": 0.5},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "我愣住了，看着办公桌上疯狂震动的座机：", "emotion": "平静", "intensity": "中等", "break_duration": 0\${sfxExample}},
+  {"type": "dialogue", "role_name": "我", "text_content": "可是……小张不是今早已经确认死亡了吗？", "emotion": "惊喜", "intensity": "微弱", "break_duration": 0.5},
+  {"type": "dialogue", "role_name": "老李", "text_content": "对，", "emotion": "低落", "intensity": "中等", "break_duration": 0},
+  {"type": "dialogue", "role_name": "旁白", "text_content": "老李的声音在发抖，", "emotion": "平静", "intensity": "中等", "break_duration": 0},
+  {"type": "dialogue", "role_name": "老李", "text_content": "所以，别接。如果你接了，他会问你为什么不救他。", "emotion": "害怕", "intensity": "强烈", "break_duration": 0}
 ]
 
 # 输入内容
@@ -1245,7 +1257,7 @@
                 };
 
                 // Watchers for Auto-Save
-                watch([rawScript, characters, sfxLibrary, bgmLibrary, timbres, filterLibrary, emotionPresets, emotionIntensity], () => {
+                watch([rawScript, characters, sfxLibrary, bgmLibrary, timbres, filterLibrary, emotionPresets], () => {
                     triggerAutoSave();
                 }, { deep: true });
                 
@@ -1289,16 +1301,7 @@
                     ];
 
                     // 初始化默认情绪
-                    emotionPresets.value = [
-                        { id: '1', name: '中立',    text: '语气平淡，客观冷静' },
-                        { id: '2', name: '开心',      text: '嘴角微扬，略带笑意' },
-                        { id: '3', name: '悲伤',        text: '声音低沉，略显失落' },
-                        { id: '4', name: '愤怒',      text: '语气生硬，压抑怒火' },
-                        { id: '5', name: '惊讶',  text: '略显意外，语调微扬' },
-                        { id: '6', name: '恐惧',       text: '呼吸微促，略带不安' },
-                        { id: '7', name: '厌恶',    text: '眉头微皱，略显不耐' },
-                        { id: '8', name: '激动',    text: '语速稍快，略显急切' }
-                    ];
+                    emotionPresets.value = [...SYSTEM_EMOTIONS];
 
                     const savedPrompt = localStorage.getItem('storyforge_prompt_template');
                     if (savedPrompt) {
@@ -1325,7 +1328,6 @@
                         if (projectData) {
                             rawScript.value = projectData.rawScript || '';
                             rawAnalysisResult.value = projectData.rawAnalysisResult || '';
-                            emotionIntensity.value = projectData.emotionIntensity || 5;
                             characters.value = projectData.characters || [];
                             
                             if (projectData.libraries) {
@@ -1333,7 +1335,20 @@
                                 bgmLibrary.value = projectData.libraries.bgm || [];
                                 timbres.value = projectData.libraries.timbres || [];
                                 filterLibrary.value = projectData.libraries.filters || [];
-                                emotionPresets.value = projectData.libraries.emotions || [];
+                                if (projectData.libraries.emotions && Array.isArray(projectData.libraries.emotions)) {
+                                    // 恢复情绪库：保留自定义情绪 + 恢复系统情绪的启用状态
+                                    const customLoaded = projectData.libraries.emotions.filter(e => !isSystemEmotion(e.name) && Array.isArray(e.vector));
+                                    const systemLoaded = projectData.libraries.emotions.filter(e => isSystemEmotion(e.name));
+                                    
+                                    const mergedSystem = SYSTEM_EMOTIONS.map(def => {
+                                        const saved = systemLoaded.find(s => s.name === def.name);
+                                        return { ...def, enabled: saved ? saved.enabled : undefined };
+                                    });
+                                    
+                                    emotionPresets.value = [...mergedSystem, ...customLoaded];
+                                } else {
+                                    emotionPresets.value = [...SYSTEM_EMOTIONS];
+                                }
                             }
 
                             // 2. Restore Assets & Audio
@@ -1785,12 +1800,13 @@
                 // 移除 saveEmotionPresetsToLocal
 
                 const saveEmotion = () => {
-                    if (!emotionForm.value.name || !emotionForm.value.text) return alert('请填写完整');
+                    if (!emotionForm.value.name) return alert('请填写情绪名称');
+                    if (isSystemEmotion(emotionForm.value.name)) return alert('无法修改或覆盖系统预设情绪');
                     if (isEditingEmotion.value) {
                         const index = emotionPresets.value.findIndex(e => e.id === emotionForm.value.id);
                         if (index !== -1) emotionPresets.value[index] = { ...emotionForm.value };
                     } else {
-                        emotionPresets.value.push({ ...emotionForm.value, id: Date.now().toString() });
+                        emotionPresets.value.push({ ...emotionForm.value, id: Date.now().toString(), enabled: true });
                     }
                     // saveEmotionPresetsToLocal();
                     resetEmotionForm();
@@ -1808,44 +1824,13 @@
                 };
 
                 const resetEmotionForm = () => {
-                    emotionForm.value = { id: '', name: '', text: '' };
+                    emotionForm.value = { id: '', name: '', vector: [0,0,0,0,0,0,0,0] };
                     isEditingEmotion.value = false;
-                };
-
-                const getPresetId = (text) => {
-                    const found = emotionPresets.value.find(p => p.text === text);
-                    return found ? found.id : 'custom';
-                };
-
-                const getEmotionSelectValue = (line) => {
-                    if (line.emotion_text === line.original_emotion_text) return "";
-                    const preset = emotionPresets.value.find(p => p.text === line.emotion_text);
-                    return preset ? preset.text : "custom_option";
-                };
-
-                const applyPresetToLine = (line, event) => {
-                    const presetText = event.target.value;
-                    if (presetText === 'custom_option') return;
-
-                    if (presetText) {
-                        line.emotion_text = presetText;
-                    } else {
-                        line.emotion_text = line.original_emotion_text || '中立';
-                    }
                 };
 
                 const resetEmotionsToDefault = () => {
                     if (!confirm('确定要重置所有情绪预设为默认值吗？这将清除自定义的情绪。')) return;
-                    emotionPresets.value = [
-                        { id: '1', name: '中立',    text: '语气平淡，客观冷静' },
-                        { id: '2', name: '开心',      text: '嘴角微扬，略带笑意' },
-                        { id: '3', name: '悲伤',        text: '声音低沉，略显失落' },
-                        { id: '4', name: '愤怒',      text: '语气生硬，压抑怒火' },
-                        { id: '5', name: '惊讶',  text: '略显意外，语调微扬' },
-                        { id: '6', name: '恐惧',       text: '呼吸微促，略带不安' },
-                        { id: '7', name: '厌恶',    text: '眉头微皱，略显不耐' },
-                        { id: '8', name: '激动',    text: '语速稍快，略显急切' }
-                    ];
+                    emotionPresets.value = [...SYSTEM_EMOTIONS];
                     // saveEmotionPresetsToLocal();
                 };
 
@@ -1884,6 +1869,14 @@
                     return curve;
                 };
 
+                const intensityMap = {
+                    "微弱": 0.2,
+                    "稍弱": 0.35,
+                    "中等": 0.5,
+                    "较强": 0.75,
+                    "强烈": 1.0
+                };
+
                 const generateLineAudio = async (line) => {
                     if (!currentTtsConfig.value) return alert('请先在 TTS 配置中心选择一个 TTS 服务');
                     
@@ -1896,10 +1889,25 @@
                             throw new Error(`角色 "${line.role}" 未绑定音色文件路径。\n\n请在左侧的角色列表中为该角色选择一个音色文件，或手动输入路径。`);
                         }
                         
+                        // 8维向量计算逻辑
+                        let finalVector = [0,0,0,0,0,0,0,0];
+                        const preset = emotionPresets.value.find(e => e.name === line.emotion);
+                        if (preset && preset.vector) {
+                            if (isSystemEmotion(line.emotion)) {
+                                const intensityVal = intensityMap[line.intensity] || 0.5;
+                                // 系统情绪：向量 * 强度
+                                finalVector = preset.vector.map(v => v * intensityVal);
+                            } else {
+                                // 自定义情绪：直接使用定义的向量，忽略强度
+                                finalVector = preset.vector;
+                            }
+                        }
+
                         const payload = {
                             text: line.text,
                             audio_path: char.voiceFile, // Use voiceFile directly
-                            emo_text: line.emotion_text || '中立',
+                            // emo_text 已移除
+                            emo_vector: finalVector
                         };
 
                         const cfg = currentTtsConfig.value;
@@ -2307,7 +2315,6 @@
                         project: {
                             rawScript: rawScript.value,
                             rawAnalysisResult: rawAnalysisResult.value,
-                            emotionIntensity: emotionIntensity.value,
                             characters: characters.value,
                             scriptLines: linesToSave
                         }
@@ -2401,6 +2408,21 @@
                                     timbres.value = await restoreLibraryFiles(data.libraries.timbres, 'refPath');
                                     filterLibrary.value = data.libraries.filters || [];
                                     emotionPresets.value = data.libraries.emotions || [];
+                                    
+                                    // 恢复情绪库：合并系统预设 + 导入的自定义情绪
+                                    if (data.libraries.emotions && Array.isArray(data.libraries.emotions)) {
+                                        const customImported = data.libraries.emotions.filter(e => !isSystemEmotion(e.name) && Array.isArray(e.vector));
+                                        const systemImported = data.libraries.emotions.filter(e => isSystemEmotion(e.name));
+                                        
+                                        const mergedSystem = SYSTEM_EMOTIONS.map(def => {
+                                            const imported = systemImported.find(s => s.name === def.name);
+                                            return { ...def, enabled: imported ? imported.enabled : undefined };
+                                        });
+                                        
+                                        emotionPresets.value = [...mergedSystem, ...customImported];
+                                    } else {
+                                        emotionPresets.value = [...SYSTEM_EMOTIONS];
+                                    }
 
                                     // 不再调用 save*ToLocal，因为数据仅在内存中
                                     
@@ -2413,7 +2435,6 @@
                                 const proj = data.project;
                                 rawScript.value = proj.rawScript || '';
                                 rawAnalysisResult.value = proj.rawAnalysisResult || '';
-                                emotionIntensity.value = proj.emotionIntensity || 5;
                                 characters.value = proj.characters || [];
 
                                 // 恢复台词音频
@@ -2453,7 +2474,6 @@
                                 if (confirm('检测到旧版存档。确定要读取吗？当前未保存的进度将被覆盖。')) {
                                     if (data.rawScript !== undefined) rawScript.value = data.rawScript;
                                     if (data.rawAnalysisResult !== undefined) rawAnalysisResult.value = data.rawAnalysisResult;
-                                    if (data.emotionIntensity !== undefined) emotionIntensity.value = data.emotionIntensity;
                                     
                                     // 修复：读取存档时，如果存档包含角色列表则直接使用，否则根据台词重建角色列表
                                     // 这样可以确保“没有的角色要删除”，并且“角色的音色选用也要保存”
@@ -2908,8 +2928,8 @@
                         id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
                         type: 'dialogue',
                         role: '旁白', 
-                        emotion_text: '中立',
-                        original_emotion_text: '中立',
+                        emotion: '平静',
+                        intensity: '中等',
                         filter: '',
                         text: text,
                         trimStart: 0,
@@ -2943,8 +2963,8 @@
                         id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
                         type: 'dialogue',
                         role: '旁白', 
-                        emotion_text: '中立',
-                        original_emotion_text: '中立',
+                        emotion: '平静',
+                        intensity: '中等',
                         filter: '',
                         text: '',
                         trimStart: 0,
@@ -3144,6 +3164,8 @@
                         filterSection = `# 滤波器库 (Audio Filters)\n当前滤波器库为空。\n**注意：请勿生成任何 filter 字段。**`;
                     }
 
+                    const emotionList = emotionPresets.value.filter(e => e.enabled !== false).map(e => e.name).join(', ');
+
                     const bgmExampleLine = enabledBgm.length > 0 
                         ? `{"type": "bgm", "action": "play", "name": "${enabledBgm[0].name}"},`
                         : '';
@@ -3154,7 +3176,7 @@
 
                     const templateToUse = useCustomPrompt.value ? customPromptTemplate.value : defaultPromptTemplate;
                     let finalPrompt = templateToUse
-                        .replace(/\${emotionIntensity}/g, emotionIntensity.value)
+                        .replace(/\${emotionList}/g, emotionList)
                         .replace(/\${sfxSection}/g, sfxSection)
                         .replace(/\${bgmSection}/g, bgmSection)
                         .replace(/\${filterSection}/g, filterSection)
@@ -3276,8 +3298,8 @@
                                     // Dialogue fields
                                     role: item.role_name || item.role || '旁白',
                                     text: item.text_content || item.text || item.content || '',
-                                    emotion_text: item.emotion_text || item.emotion || '中立',
-                                    original_emotion_text: item.emotion_text || item.emotion || '中立',
+                                    emotion: item.emotion || '平静',
+                                    intensity: item.intensity || '中等',
                                     filter: matchedFilter,
                                     sfx: matchedSfx,
                                     break_duration: typeof item.break_duration === 'number' ? item.break_duration : 0,
@@ -3552,7 +3574,8 @@
 
                     // Emotion Actions
                     emotionPresets, emotionForm, isEditingEmotion,
-                    saveEmotion, editEmotion, deleteEmotion, resetEmotionForm, getPresetId, applyPresetToLine, getEmotionSelectValue, resetEmotionsToDefault,
+                    saveEmotion, editEmotion, deleteEmotion, resetEmotionForm, resetEmotionsToDefault,
+                    isSystemEmotion, // Export helper
 
                     // SFX Actions
                     sfxLibrary, sfxForm, isEditingSfx,
@@ -3572,7 +3595,7 @@
                     playbackProgress, // Export for template
 
                     // Script Actions
-                    rawScript, scriptLines, splitScript, removeScriptLine, autoResizeTextarea, analyzeScript, isAnalyzingScript, rawAnalysisResult, emotionIntensity,
+                    rawScript, scriptLines, splitScript, removeScriptLine, autoResizeTextarea, analyzeScript, isAnalyzingScript, rawAnalysisResult,
                     addBgmBlock, addDialogueBlock, selectedLineIndex,
                     drawWaveform, startDragTrim, // Exported for template
                     generateAllLines, isGeneratingAll,
@@ -3588,4 +3611,4 @@
         }).mount('#app');
     </script>
 </body>
-</html>             
+</html>
